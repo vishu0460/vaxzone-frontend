@@ -1,0 +1,10 @@
+node_modules/
+dist/
+*.log
+Dockerfile
+tests/
+src/test/
+playwright.config.js
+vitest.config.js
+.env
+.env.*

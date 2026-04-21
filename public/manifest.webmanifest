@@ -1,0 +1,17 @@
+{
+  "name": "VaxZone Vaccination System",
+  "short_name": "VaxZone",
+  "description": "Secure vaccination scheduling, booking, reminders, and certificate verification.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8fbff",
+  "theme_color": "#0ea5e9",
+  "icons": [
+    {
+      "src": "/assets/logo/vaxzone-logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

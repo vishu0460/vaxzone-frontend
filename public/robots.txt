@@ -1,0 +1,12 @@
+# VaxZone
+# https://vaxzone.app
+
+User-agent: *
+Allow: /
+Disallow: /admin/
+Disallow: /user/
+Disallow: /api/
+Disallow: /reset-password
+Disallow: /forgot-password
+
+Sitemap: https://vaxzone.app/sitemap.xml

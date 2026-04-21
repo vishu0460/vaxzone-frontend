@@ -1,0 +1,175 @@
+/* VaxZone Brand Theme */
+:root {
+  /* Primary Colors - Healthcare Blue */
+  --vax-primary: #1E88E5;
+  --vax-primary-dark: #1565C0;
+  --vax-primary-light: #42A5F5;
+  
+  /* Secondary Colors - Health Green */
+  --vax-secondary: #43A047;
+  --vax-secondary-dark: #2E7D32;
+  --vax-secondary-light: #66BB6A;
+  
+  /* Accent */
+  --vax-accent: #00ACC1;
+  
+  /* Background */
+  --vax-bg: #F4F8FB;
+  --vax-bg-dark: #1a1a2e;
+  
+  /* Text */
+  --vax-text: #1F2937;
+  --vax-text-muted: #6B7280;
+  
+  /* Success */
+  --vax-success: #10B981;
+  --vax-danger: #EF4444;
+  --vax-warning: #F59E0B;
+}
+
+/* Brand Colors Applied */
+.bg-gradient {
+  background: linear-gradient(135deg, var(--vax-primary) 0%, var(--vax-primary-dark) 100%);
+}
+
+.text-primary {
+  color: var(--vax-primary) !important;
+}
+
+.btn-primary {
+  background-color: var(--vax-primary);
+  border-color: var(--vax-primary);
+}
+
+.btn-primary:hover {
+  background-color: var(--vax-primary-dark);
+  border-color: var(--vax-primary-dark);
+}
+
+.btn-outline-primary {
+  color: var(--vax-primary);
+  border-color: var(--vax-primary);
+}
+
+.btn-outline-primary:hover {
+  background-color: var(--vax-primary);
+  border-color: var(--vax-primary);
+}
+
+.bg-primary {
+  background-color: var(--vax-primary) !important;
+}
+
+.text-success {
+  color: var(--vax-secondary) !important;
+}
+
+.btn-success {
+  background-color: var(--vax-secondary);
+  border-color: var(--vax-secondary);
+}
+
+.bg-success {
+  background-color: var(--vax-secondary) !important;
+}
+
+/* Footer Theme */
+.footer {
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+}
+
+.footer-logo {
+  background: linear-gradient(135deg, var(--vax-primary) 0%, var(--vax-secondary) 100%);
+}
+
+.footer-heading {
+  color: var(--vax-secondary) !important;
+}
+
+/* Navbar Brand */
+.navbar-brand {
+  font-weight: 700;
+  color: var(--vax-primary) !important;
+}
+
+/* Card Styles */
+.card {
+  border-radius: 0.75rem;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+/* Icon Wrapper */
+.icon-wrapper {
+  width: 50px;
+  height: 50px;
+  background: linear-gradient(135deg, var(--vax-primary) 0%, var(--vax-accent) 100%);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 1.5rem;
+}
+
+/* Page Header */
+.page-header {
+  background: linear-gradient(135deg, var(--vax-primary) 0%, var(--vax-primary-dark) 100%);
+  color: white;
+  padding: 3rem 0;
+}
+
+/* Badge Styles */
+.badge {
+  padding: 0.5em 1em;
+  border-radius: 50px;
+  font-weight: 500;
+}
+
+/* Form Styles */
+.form-control:focus, .form-select:focus {
+  border-color: var(--vax-primary);
+  box-shadow: 0 0 0 0.2rem rgba(30, 136, 229, 0.25);
+}
+
+/* Link Styles */
+a {
+  color: var(--vax-primary);
+  text-decoration: none;
+}
+
+a:hover {
+  color: var(--vax-primary-dark);
+}
+
+/* VaxZone Logo Styles */
+.logo-container {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.logo-icon {
+  width: 40px;
+  height: 40px;
+}
+
+.logo-text {
+  font-size: 1.5rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--vax-primary) 0%, var(--vax-secondary) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .logo-text {
+    font-size: 1.25rem;
+  }
+  
+  .logo-icon {
+    width: 32px;
+    height: 32px;
+  }
+}

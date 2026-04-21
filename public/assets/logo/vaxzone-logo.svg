@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title>VaxZone Logo</title>
+  <desc>Shield with cross and check mark representing safe vaccination.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0ea5e9" />
+      <stop offset="100%" stop-color="#0369a1" />
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="28" fill="url(#bg)" />
+  <path d="M64 20c14 12 29 16 40 18v26c0 23-15 38-40 46C39 102 24 87 24 64V38c11-2 26-6 40-18Z" fill="#ffffff" opacity="0.95"/>
+  <path d="M58 42h12v14h14v12H70v14H58V68H44V56h14Z" fill="#0ea5e9"/>
+  <path d="m52 91-10-10 6-6 4 4 18-18 6 6Z" fill="#16a34a"/>
+</svg>
