@@ -2,12 +2,15 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import NearbyCentersSection from "../components/NearbyCentersSection";
 import Seo from "../components/Seo";
+import { SkeletonDriveCards } from "../components/Skeleton";
 import SmartSearch from "../components/SmartSearch";
 import StatCard from "../components/StatCard";
 import useCurrentTime from "../hooks/useCurrentTime";
 import { getErrorMessage } from "../api/client";
 import { fetchDashboardStats } from "../services/dashboardService";
-import { getCountdownLabel, getRealtimeStatus, getStatusBadgeClass, isDriveBookable } from "../utils/realtimeStatus";
+import { getCountdownLabel, getDriveAvailabilityLabel, getDriveRealtimeStatus, getRealtimeStatus, getStatusBadgeClass, isDriveBookable } from "../utils/realtimeStatus";
+import { buildAdminDriveActionSearch, buildAdminDriveActionState, getAdminDriveActionPath, getUnavailableDriveAdminAction, isAdminDriveRole } from "../utils/adminDriveActions";
+import { getRole } from "../utils/auth";
 import { usePublicCatalog } from "../context/PublicCatalogContext";
 
 const mapDrive = (drive) => ({
@@ -24,8 +27,88 @@ const mapDrive = (drive) => ({
   realtimeStatus: drive.realtimeStatus || getRealtimeStatus(drive.startDateTime || drive.startTime, drive.endDateTime || drive.endTime)
 });
 
+function DriveCard({ drive, index, now, isAdminSession, onAdminDriveAction }) {
+  const driveStatus = getDriveRealtimeStatus(drive, now);
+  const canBookDrive = isDriveBookable(drive, now);
+  const availabilityLabel = getDriveAvailabilityLabel({ ...drive, realtimeStatus: driveStatus }, now);
+  const adminAction = isAdminSession ? getUnavailableDriveAdminAction(drive, driveStatus) : null;
+
+  return (
+    <div className={`col-md-6 col-lg-4 fade-in stagger-${index + 1}`}>
+      <div className="drive-card h-100">
+        <div className="card-header d-flex justify-content-between align-items-center">
+          <h5 className="mb-0 fs-6">{drive.name}</h5>
+          {canBookDrive ? (
+            <span className="badge bg-white text-primary">{drive.availableSlots} left</span>
+          ) : drive.availableSlots > 0 ? (
+            <span className="badge bg-danger">{availabilityLabel}</span>
+          ) : (
+            <span className="badge bg-warning text-dark">{availabilityLabel}</span>
+          )}
+        </div>
+        <div className="card-body">
+          <div className="d-flex align-items-center gap-2 mb-3 flex-wrap">
+            <span className={`badge ${getStatusBadgeClass(driveStatus)}`}>
+              {driveStatus}
+            </span>
+            <small className="text-muted">
+              {getCountdownLabel(driveStatus, drive.startDateTime, drive.endDateTime, now)}
+            </small>
+          </div>
+          <div className="info-item">
+            <i className="bi bi-calendar-event"></i>
+            <span>{new Date(drive.date).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}</span>
+          </div>
+          <div className="info-item">
+            <i className="bi bi-clock"></i>
+            <span>{drive.startTime} - {drive.endTime}</span>
+          </div>
+          <div className="info-item">
+            <i className="bi bi-building"></i>
+            <span>{drive.centerName}</span>
+          </div>
+          <div className="info-item">
+            <span className="drive-age-text">Age: {drive.minAge}-{drive.maxAge} years</span>
+          </div>
+
+          <div className="mt-3">
+            <div className="d-flex justify-content-between mb-1">
+              <small className="text-muted">Capacity</small>
+              <small className="text-muted">{drive.availableSlots}/{drive.totalSlots}</small>
+            </div>
+            <div className="slots-progress">
+              <div
+                className="progress-bar"
+                style={{
+                  width: `${drive.totalSlots > 0 ? ((drive.totalSlots - drive.availableSlots) / drive.totalSlots) * 100 : 0}%`
+                }}
+              ></div>
+            </div>
+          </div>
+        </div>
+        <div className="card-footer bg-white border-top-0 pt-0">
+          {canBookDrive ? (
+            <Link to={`/drives?book=${drive.id}`} className="btn btn-primary w-100">
+              <i className="bi bi-bookmark-plus me-2"></i>Book Now
+            </Link>
+          ) : adminAction ? (
+            <button className="btn btn-outline-primary w-100" onClick={() => onAdminDriveAction(drive, adminAction.type)}>
+              <i className={`${adminAction.iconClassName} me-2`}></i>{adminAction.label}
+            </button>
+          ) : (
+            <button className="btn btn-secondary w-100" disabled>
+              <i className="bi bi-x-circle me-2"></i>{availabilityLabel}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function HomePage() {
   const navigate = useNavigate();
+  const isAdminSession = isAdminDriveRole(getRole());
   const [stats, setStats] = useState({
     centers: 0,
     activeDrives: 0,
@@ -90,6 +173,15 @@ export default function HomePage() {
       window.clearInterval(intervalId);
     };
   }, []);
+
+  const openAdminDriveAction = (drive, actionType) => {
+    navigate({
+      pathname: getAdminDriveActionPath(actionType),
+      search: buildAdminDriveActionSearch(drive.id, actionType)
+    }, {
+      state: buildAdminDriveActionState(drive.id, actionType)
+    });
+  };
 
   return (
     <>
@@ -275,11 +367,7 @@ export default function HomePage() {
           </div>
 
           {loading ? (
-            <div className="text-center py-5">
-              <div className="spinner-border text-primary" role="status">
-                <span className="visually-hidden">Loading...</span>
-              </div>
-            </div>
+            <SkeletonDriveCards count={6} />
           ) : error ? (
             <div className="empty-state text-center py-5">
               <i className="bi bi-wifi-off text-danger"></i>
@@ -291,78 +379,16 @@ export default function HomePage() {
             </div>
           ) : recentDrives.length > 0 ? (
             <div className="row g-4">
-              {recentDrives.map((drive, index) => (
-                <div key={drive.id} className={`col-md-6 col-lg-4 fade-in stagger-${index + 1}`}>
-                  <div className="drive-card h-100">
-                    <div className="card-header d-flex justify-content-between align-items-center">
-                      <h5 className="mb-0 fs-6">{drive.name}</h5>
-                      {isDriveBookable(drive, now) ? (
-                        <span className="badge bg-white text-primary">{drive.availableSlots} left</span>
-                      ) : drive.availableSlots > 0 ? (
-                        <span className="badge bg-danger">Expired</span>
-                      ) : (
-                        <span className="badge bg-danger">Full</span>
-                      )}
-                    </div>
-                    <div className="card-body">
-                      <div className="d-flex align-items-center gap-2 mb-3 flex-wrap">
-                        <span className={`badge ${getStatusBadgeClass(getRealtimeStatus(drive.startDateTime, drive.endDateTime, now))}`}>
-                          {getRealtimeStatus(drive.startDateTime, drive.endDateTime, now)}
-                        </span>
-                        <small className="text-muted">
-                          {getCountdownLabel(
-                            getRealtimeStatus(drive.startDateTime, drive.endDateTime, now),
-                            drive.startDateTime,
-                            drive.endDateTime,
-                            now
-                          )}
-                        </small>
-                      </div>
-                      <div className="info-item">
-                        <i className="bi bi-calendar-event"></i>
-                        <span>{new Date(drive.date).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}</span>
-                      </div>
-                      <div className="info-item">
-                        <i className="bi bi-clock"></i>
-                        <span>{drive.startTime} - {drive.endTime}</span>
-                      </div>
-                      <div className="info-item">
-                        <i className="bi bi-building"></i>
-                        <span>{drive.centerName}</span>
-                      </div>
-                      <div className="info-item">
-                        <span className="drive-age-text">Age: {drive.minAge}-{drive.maxAge} years</span>
-                      </div>
-
-                      <div className="mt-3">
-                        <div className="d-flex justify-content-between mb-1">
-                          <small className="text-muted">Capacity</small>
-                          <small className="text-muted">{drive.availableSlots}/{drive.totalSlots}</small>
-                        </div>
-                        <div className="slots-progress">
-                          <div
-                            className="progress-bar"
-                            style={{
-                              width: `${drive.totalSlots > 0 ? ((drive.totalSlots - drive.availableSlots) / drive.totalSlots) * 100 : 0}%`
-                            }}
-                          ></div>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="card-footer bg-white border-top-0 pt-0">
-                      {isDriveBookable(drive, now) ? (
-                        <Link to={`/drives?book=${drive.id}`} className="btn btn-primary w-100">
-                          <i className="bi bi-bookmark-plus me-2"></i>Book Now
-                        </Link>
-                      ) : (
-                        <button className="btn btn-secondary w-100" disabled>
-                          <i className="bi bi-x-circle me-2"></i>{drive.availableSlots > 0 ? "Expired" : "Full"}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
+                {recentDrives.map((drive, index) => (
+                  <DriveCard
+                    key={drive.id}
+                    drive={drive}
+                    index={index}
+                    now={now}
+                    isAdminSession={isAdminSession}
+                    onAdminDriveAction={openAdminDriveAction}
+                  />
+                ))}
             </div>
           ) : (
             <div className="empty-state">

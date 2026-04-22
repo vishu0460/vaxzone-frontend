@@ -3,6 +3,7 @@ import { Helmet } from "react-helmet-async";
 import { Link, useSearchParams } from "react-router-dom";
 import { getErrorMessage, normalizeSearchValue, publicAPI, unwrapApiData } from "../api/client";
 import CityAutocomplete from "../components/CityAutocomplete";
+import { SkeletonCenterCards } from "../components/Skeleton";
 import SearchInput from "../components/SearchInput";
 import useDebounce from "../hooks/useDebounce";
 import { debugDataSync, subscribeToDataUpdates } from "../utils/dataSync";
@@ -173,12 +174,7 @@ export default function CentersPage() {
         </div>
 
         {loading ? (
-          <div className="text-center py-5">
-            <div className="spinner-border text-primary" role="status">
-              <span className="visually-hidden">Loading...</span>
-            </div>
-            <p className="mt-3 text-muted">Loading vaccination centers...</p>
-          </div>
+          <SkeletonCenterCards count={6} />
         ) : error ? (
           <div className="empty-state">
             <i className="bi bi-wifi-off"></i>

@@ -19,6 +19,7 @@ import AdminCertificatesPanel from '../components/admin/AdminCertificatesPanel';
 import SmartImportPanel from '../components/admin/SmartImportPanel';
 import useCurrentTime from '../hooks/useCurrentTime';
 import { getRole } from '../utils/auth';
+import { ADMIN_DRIVE_ACTION_TYPES } from '../utils/adminDriveActions';
 import { errorToast, infoToast, successToast } from '../utils/toast';
 import { getCountdownLabel, getRealtimeStatus } from '../utils/realtimeStatus';
 import { broadcastDataUpdated, debugDataSync, subscribeToDataUpdates } from '../utils/dataSync';
@@ -1807,6 +1808,65 @@ export default function AdminDashboardPage() {
     setSelectedDrive(drive);
     await loadDriveSlots(drive.id, true);
   };
+
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    const pendingAction = location.state?.adminDriveAction || (
+      searchParams.get('action') && searchParams.get('driveId')
+        ? {
+            type: searchParams.get('action'),
+            driveId: searchParams.get('driveId')
+          }
+        : null
+    );
+    const driveId = Number(pendingAction?.driveId);
+
+    if (!pendingAction?.type || !Number.isFinite(driveId) || driveId <= 0) {
+      return;
+    }
+
+    navigate({ pathname: location.pathname }, { replace: true, state: null });
+
+    let isMounted = true;
+
+    const openRequestedAdminAction = async () => {
+      try {
+        const response = await adminAPI.getDriveById(driveId);
+        const drive = unwrapApiData(response) || response.data;
+
+        if (!isMounted || !drive) {
+          return;
+        }
+
+        if (pendingAction.type === ADMIN_DRIVE_ACTION_TYPES.MANAGE_SLOTS) {
+          setSlotFilters((current) => ({
+            ...current,
+            centerId: drive?.center?.id ? String(drive.center.id) : '',
+            driveId: String(driveId),
+            date: ''
+          }));
+          await openManageSlotsModal(drive);
+          return;
+        }
+
+        await openEditDriveModal(drive);
+      } catch (err) {
+        if (!isMounted) {
+          return;
+        }
+
+        const message = getErrorMessage(err, 'Failed to load drive details');
+        setError(message);
+        errorToast(message);
+      }
+    };
+
+    openRequestedAdminAction();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [location.pathname, location.search, location.state, navigate, openEditDriveModal, openManageSlotsModal]);
 
   const closeEditSlotModal = () => {
     setShowEditSlotModal(false);

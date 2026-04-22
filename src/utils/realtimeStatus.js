@@ -7,6 +7,19 @@ const parseDateValue = (value) => {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
 
+export const normalizeRealtimeStatus = (value) => {
+  const normalized = String(value || "").trim().toUpperCase();
+  if (!normalized) {
+    return "";
+  }
+
+  if (normalized === "LIVE") {
+    return "ACTIVE";
+  }
+
+  return normalized;
+};
+
 export const getRealtimeStatus = (startValue, endValue, nowValue = Date.now()) => {
   const start = parseDateValue(startValue);
   const end = parseDateValue(endValue);
@@ -24,14 +37,59 @@ export const getRealtimeStatus = (startValue, endValue, nowValue = Date.now()) =
   return "ACTIVE";
 };
 
+export const getDriveRealtimeStatus = (drive, nowValue = Date.now()) => {
+  const explicitStatus = normalizeRealtimeStatus(drive?.realtimeStatus);
+  if (explicitStatus) {
+    return explicitStatus;
+  }
+
+  const derivedStatus = getRealtimeStatus(
+    drive?.startDateTime || drive?.startTime,
+    drive?.endDateTime || drive?.endTime,
+    nowValue
+  );
+
+  return normalizeRealtimeStatus(derivedStatus || drive?.status) || "EXPIRED";
+};
+
+export const getDriveAvailabilityLabel = (drive, nowValue = Date.now()) => {
+  const status = getDriveRealtimeStatus(drive, nowValue);
+  const availableSlots = Number(drive?.availableSlots ?? 0);
+
+  if (status === "EXPIRED") {
+    return "Expired";
+  }
+
+  if (availableSlots <= 0) {
+    return "No Slots";
+  }
+
+  if (status === "UPCOMING" && drive?.bookable === false) {
+    return "Upcoming";
+  }
+
+  return `${availableSlots} left`;
+};
+
+export const getSlotRealtimeStatus = (slot, nowValue = Date.now()) => {
+  const explicitStatus = normalizeRealtimeStatus(slot?.status || slot?.slotStatus);
+  if (explicitStatus) {
+    return explicitStatus;
+  }
+
+  return getRealtimeStatus(
+    slot?.startDateTime || slot?.startDate || slot?.dateTime || slot?.startTime,
+    slot?.endDateTime || slot?.endDate || slot?.endTime,
+    nowValue
+  );
+};
+
 export const getStatusBadgeClass = (status) => {
-  switch (status) {
+  switch (normalizeRealtimeStatus(status)) {
     case "ACTIVE":
       return "bg-success";
     case "FULL":
       return "bg-danger";
-    case "LIVE":
-      return "bg-success";
     case "EXPIRED":
       return "bg-secondary";
     case "UPCOMING":
@@ -53,22 +111,14 @@ export const isAvailableFlag = (slot) => {
 };
 
 export const isSlotBookable = (slot, nowValue = Date.now()) => {
-  const status = String(slot?.status || slot?.slotStatus || getRealtimeStatus(
-    slot?.startDateTime || slot?.startDate || slot?.dateTime || slot?.startTime,
-    slot?.endDateTime || slot?.endDate || slot?.endTime,
-    nowValue
-  )).toUpperCase();
-  return (status === "UPCOMING" || status === "ACTIVE" || status === "LIVE") && status !== "FULL" && isAvailableFlag(slot) && !isAtCapacity(slot);
+  const status = getSlotRealtimeStatus(slot, nowValue);
+  return (status === "UPCOMING" || status === "ACTIVE") && status !== "FULL" && isAvailableFlag(slot) && !isAtCapacity(slot);
 };
 
 export const isDriveBookable = (drive, nowValue = Date.now()) => {
-  const status = getRealtimeStatus(
-    drive?.startDateTime || drive?.startTime,
-    drive?.endDateTime || drive?.endTime,
-    nowValue
-  );
+  const status = getDriveRealtimeStatus(drive, nowValue);
   const availableSlots = Number(drive?.availableSlots || 0);
-  return (status === "UPCOMING" || status === "LIVE") && availableSlots > 0 && drive?.bookable !== false;
+  return (status === "UPCOMING" || status === "ACTIVE") && availableSlots > 0 && drive?.bookable !== false;
 };
 
 export const formatCountdown = (targetValue, nowValue = Date.now()) => {
@@ -110,13 +160,15 @@ export const formatCountdown = (targetValue, nowValue = Date.now()) => {
 };
 
 export const getCountdownLabel = (status, startValue, endValue, nowValue = Date.now()) => {
-  if (status === "UPCOMING") {
+  const normalizedStatus = normalizeRealtimeStatus(status);
+
+  if (normalizedStatus === "UPCOMING") {
     return `Starts in: ${formatCountdown(startValue, nowValue)}`;
   }
-  if (status === "ACTIVE" || status === "LIVE") {
+  if (normalizedStatus === "ACTIVE") {
     return `Ends in: ${formatCountdown(endValue, nowValue)}`;
   }
-  if (status === "FULL") {
+  if (normalizedStatus === "FULL") {
     return "Fully booked";
   }
   return "Expired";

@@ -4,11 +4,13 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { adminAPI, getErrorMessage, publicAPI, unwrapApiData, userAPI } from "../api/client";
 import DriveBookingModal from "../components/booking/DriveBookingModal";
 import CityAutocomplete from "../components/CityAutocomplete";
+import { SkeletonDriveCards, SkeletonFilterCard, SkeletonMetricTiles } from "../components/Skeleton";
 import SearchInput from "../components/SearchInput";
 import useDebounce from "../hooks/useDebounce";
 import useCurrentTime from "../hooks/useCurrentTime";
-import { getCountdownLabel, getRealtimeStatus, getStatusBadgeClass, isDriveBookable } from "../utils/realtimeStatus";
+import { getCountdownLabel, getDriveAvailabilityLabel, getDriveRealtimeStatus, getRealtimeStatus, getStatusBadgeClass, isDriveBookable } from "../utils/realtimeStatus";
 import { getRole, isAuthenticated } from "../utils/auth";
+import { buildAdminDriveActionSearch, buildAdminDriveActionState, getAdminDriveActionPath, getUnavailableDriveAdminAction, isAdminDriveRole } from "../utils/adminDriveActions";
 import { broadcastDataUpdated } from "../utils/dataSync";
 import { usePublicCatalog } from "../context/PublicCatalogContext";
 import { DEFAULT_VISIBLE_COUNT, getDisplayedItems, matchesSmartSearch, shouldShowViewMore } from "../utils/listSearch";
@@ -75,11 +77,128 @@ const parseFilters = (searchParams) => ({
   slot: searchParams.get("slot") || ""
 });
 
+function DriveResultCard({ drive, index, now, viewMode, filters, renderBookButton }) {
+  const driveStatus = getDriveRealtimeStatus(drive, now);
+  const canBookDrive = isDriveBookable({ ...drive, realtimeStatus: driveStatus }, now);
+  const availabilityLabel = getDriveAvailabilityLabel({ ...drive, realtimeStatus: driveStatus }, now);
+
+  return (
+    <div key={drive.id} className={`${viewMode === "grid" ? "col-md-6 col-lg-4" : ""} fade-in stagger-${(index % 6) + 1}`}>
+      <div className={`drive-card h-100 ${viewMode === "list" ? "drive-card--list" : ""} ${drive.isEligible === false ? "drive-card--ineligible" : ""}`}>
+        {viewMode === "grid" ? (
+          <div className="card-header d-flex justify-content-between align-items-center">
+            <h5 className="mb-0 fs-6">{drive.name}</h5>
+            {drive.isEligible === false ? (
+              <span className="badge bg-secondary-subtle text-secondary-emphasis">{drive.eligibilityLabel}</span>
+            ) : !drive.hasSlots ? (
+              <span className="badge bg-warning">No Slots</span>
+            ) : canBookDrive ? (
+              <span className="badge bg-white text-primary">{drive.availableSlots} left</span>
+            ) : (
+              <span className={`badge ${availabilityLabel === "No Slots" ? "bg-warning text-dark" : "bg-danger"}`}>{availabilityLabel}</span>
+            )}
+          </div>
+        ) : null}
+        <div className={`card-body ${viewMode === "list" ? "d-flex flex-row align-items-center gap-4 drive-card__body--list" : ""}`}>
+          {viewMode === "list" ? (
+            <div className="text-center p-3 bg-primary bg-opacity-10 rounded">
+              <i className="bi bi-calendar-event display-6 text-primary"></i>
+            </div>
+          ) : null}
+          <div className="flex-grow-1">
+            {viewMode === "list" ? (
+              <div className="d-flex justify-content-between align-items-start mb-2 drive-card__list-header">
+                <h5 className="fw-bold mb-0">{drive.name}</h5>
+                {drive.isEligible === false ? (
+                  <span className="badge bg-secondary-subtle text-secondary-emphasis">{drive.eligibilityLabel}</span>
+                ) : !drive.hasSlots ? (
+                  <span className="badge bg-warning">No Slots</span>
+                ) : canBookDrive ? (
+                  <span className="badge bg-success">{drive.availableSlots} slots left</span>
+                ) : (
+                  <span className={`badge ${availabilityLabel === "No Slots" ? "bg-warning text-dark" : "bg-danger"}`}>{availabilityLabel}</span>
+                )}
+              </div>
+            ) : null}
+            <div className="d-flex align-items-center gap-2 mb-3 flex-wrap">
+              <span className={`badge ${getStatusBadgeClass(driveStatus)}`}>
+                {driveStatus}
+              </span>
+              <small className="text-muted">
+                {getCountdownLabel(driveStatus, drive.startDateTime, drive.endDateTime, now)}
+              </small>
+            </div>
+            <div className="row g-2">
+              <div className="col-6">
+                <div className="info-item">
+                  <i className="bi bi-calendar-event"></i>
+                  <span>{new Date(drive.date).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}</span>
+                </div>
+              </div>
+              <div className="col-6">
+                <div className="info-item">
+                  <i className="bi bi-clock"></i>
+                  <span>{drive.startTime} - {drive.endTime}</span>
+                </div>
+              </div>
+              <div className="col-6">
+                <div className="info-item">
+                  <i className="bi bi-building"></i>
+                  <span>{drive.centerName}</span>
+                </div>
+              </div>
+              <div className="col-6">
+                <div className="info-item">
+                  <i className="bi bi-broadcast"></i>
+                  <span>{driveStatus}</span>
+                </div>
+              </div>
+              <div className="col-6">
+                <div className="info-item">
+                  <i className="bi bi-geo-alt"></i>
+                  <span>{drive.centerCity || filters.city || "N/A"}</span>
+                </div>
+              </div>
+              <div className="col-6">
+                <div className="info-item">
+                  <span className="drive-age-text">Age: {drive.ageLabel || `${drive.minAge}+`}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-3">
+              <div className="d-flex justify-content-between mb-1">
+                <small className="text-muted">Capacity</small>
+                <small className="text-muted">{drive.availableSlots}/{drive.totalSlots}</small>
+              </div>
+              <div className="slots-progress">
+                <div
+                  className="progress-bar"
+                  style={{ width: `${drive.totalSlots > 0 ? ((drive.totalSlots - drive.availableSlots) / drive.totalSlots) * 100 : 0}%` }}
+                ></div>
+              </div>
+            </div>
+            {drive.isEligible === false ? (
+              <div className="drive-eligibility-note">
+                <i className="bi bi-info-circle"></i>
+                <span>{drive.eligibilityReason}</span>
+              </div>
+            ) : null}
+          </div>
+        </div>
+        <div className="card-footer border-top-0 pt-0">
+          {renderBookButton({ ...drive, realtimeStatus: driveStatus })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function DrivesPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const currentRole = getRole();
-  const isAdminSession = currentRole === "ADMIN" || currentRole === "SUPER_ADMIN";
+  const isAdminSession = isAdminDriveRole(currentRole);
   const bookParam = searchParams.get("book");
   const [drives, setDrives] = useState([]);
   const [userProfile, setUserProfile] = useState(null);
@@ -342,6 +461,15 @@ export default function DrivesPage() {
     }
   };
 
+  const openAdminDriveAction = (drive, actionType) => {
+    navigate({
+      pathname: getAdminDriveActionPath(actionType),
+      search: buildAdminDriveActionSearch(drive.id, actionType)
+    }, {
+      state: buildAdminDriveActionState(drive.id, actionType)
+    });
+  };
+
   const closeBookingModal = () => {
     setBookingDrive(null);
     setBookingSlots([]);
@@ -484,6 +612,10 @@ export default function DrivesPage() {
   }, [filters]);
 
   const renderBookButton = (drive) => {
+    const driveStatus = getDriveRealtimeStatus(drive, now);
+    const availabilityLabel = getDriveAvailabilityLabel({ ...drive, realtimeStatus: driveStatus }, now);
+    const adminAction = isAdminSession ? getUnavailableDriveAdminAction(drive, driveStatus) : null;
+
     if (drive.isEligible === false) {
       return (
         <button className="btn btn-secondary w-100" disabled title={drive.eligibilityReason}>
@@ -496,19 +628,26 @@ export default function DrivesPage() {
       );
     }
 
-    const realtimeStatus = getRealtimeStatus(drive.startDateTime, drive.endDateTime, now);
-    if (!drive.hasSlots || drive.availableSlots <= 0) {
+    if (adminAction) {
       return (
-        <button className="btn btn-secondary w-100" disabled>
-          <i className="bi bi-x-circle me-2"></i>Full
+        <button className="btn btn-outline-primary w-100" onClick={() => openAdminDriveAction(drive, adminAction.type)}>
+          <i className={`${adminAction.iconClassName} me-2`}></i>{adminAction.label}
         </button>
       );
     }
 
-    if (!isDriveBookable({ ...drive, realtimeStatus }, now)) {
+    if (!drive.hasSlots || drive.availableSlots <= 0) {
       return (
         <button className="btn btn-secondary w-100" disabled>
-          <i className="bi bi-clock-history me-2"></i>Expired
+          <i className="bi bi-x-circle me-2"></i>{availabilityLabel}
+        </button>
+      );
+    }
+
+    if (!isDriveBookable({ ...drive, realtimeStatus: driveStatus }, now)) {
+      return (
+        <button className="btn btn-secondary w-100" disabled>
+          <i className="bi bi-clock-history me-2"></i>{driveStatus === "UPCOMING" ? "Upcoming" : "Expired"}
         </button>
       );
     }
@@ -552,170 +691,179 @@ export default function DrivesPage() {
           </div>
         ) : null}
 
-        <div className="row g-3 mb-4 drives-page__stats">
-          <div className="col-md-4">
-            <div className="stats-card">
-              <div className="stat-number">{summary.activeDrives}</div>
-              <div className="stat-label">Active Drives</div>
+        {loading ? (
+          <div className="mb-4 drives-page__stats">
+            <SkeletonMetricTiles />
+          </div>
+        ) : (
+          <div className="row g-3 mb-4 drives-page__stats">
+            <div className="col-md-4">
+              <div className="stats-card">
+                <div className="stat-number">{summary.activeDrives}</div>
+                <div className="stat-label">Active Drives</div>
+              </div>
+            </div>
+            <div className="col-md-4">
+              <div className="stats-card bg-success">
+                <div className="stat-number">{summary.totalCenters}</div>
+                <div className="stat-label">Centers</div>
+              </div>
+            </div>
+            <div className="col-md-4">
+              <div className="stats-card bg-info">
+                <div className="stat-number">{summary.availableSlots}</div>
+                <div className="stat-label">Available Slots</div>
+              </div>
             </div>
           </div>
-          <div className="col-md-4">
-            <div className="stats-card bg-success">
-              <div className="stat-number">{summary.totalCenters}</div>
-              <div className="stat-label">Centers</div>
-            </div>
-          </div>
-          <div className="col-md-4">
-            <div className="stats-card bg-info">
-              <div className="stat-number">{summary.availableSlots}</div>
-              <div className="stat-label">Available Slots</div>
-            </div>
-          </div>
-        </div>
-
-        <div className="card border-0 shadow-sm mb-4 drives-page__filter-card">
-          <div className="card-body drive-filters">
-            <div className="drive-filters__header">
-              <div>
-                <span className="drive-filters__eyebrow">Live Search</span>
-                <h4 className="drive-filters__title">Refine drives instantly</h4>
-                <p className="drive-filters__copy mb-0">Filters apply automatically as you type or choose options.</p>
-                {isAuthenticated() && Number.isFinite(Number(userProfile?.age)) && Number(userProfile?.age) > 0 ? (
-                  <p className="small text-muted mt-2 mb-0">Showing drives prioritized for age {userProfile.age}.</p>
-                ) : isAuthenticated() ? (
-                  <p className="small text-muted mt-2 mb-0">Add your date of birth to your profile to unlock automatic eligibility filtering.</p>
-                ) : null}
-              </div>
-              <div className="drive-filters__header-actions">
-                <div className="drive-filters__result-pill" aria-live="polite">
-                  <strong>{filteredDrives.length}</strong>
-                  <span>{filteredDrives.length === 1 ? "drive" : "drives"}</span>
-                </div>
-                <button className="btn btn-outline-secondary drive-filters__clear-btn" onClick={clearFilters} disabled={loading}>
-                  <i className="bi bi-arrow-counterclockwise me-2"></i>Clear filters
-                </button>
-              </div>
-            </div>
-
-            <div className="drive-filters__grid">
-              <div className="drive-filter-field drive-filter-field--search">
-                <label className="form-label">Smart Search</label>
-                <SearchInput
-                  value={search}
-                  onChange={(value) => {
-                    setSearch(value);
-                    setVisibleCount(DEFAULT_VISIBLE_COUNT);
-                  }}
-                  placeholder="Search drives by title, center, city, vaccine"
-                  icon="search"
-                  onClear={() => {
-                    setSearch("");
-                    setVisibleCount(DEFAULT_VISIBLE_COUNT);
-                  }}
-                />
-              </div>
-
-              <div className="drive-filter-field">
-                <label className="form-label">City</label>
-                <CityAutocomplete
-                  value={filters.city}
-                  onChange={(city) => setFilters((current) => ({ ...current, city }))}
-                  onSelect={(city) => setFilters((current) => ({ ...current, city }))}
-                  onEnter={(enteredCity) => setFilters((current) => ({ ...current, city: enteredCity }))}
-                  placeholder="Search by city"
-                />
-              </div>
-
-              <div className="drive-filter-field drive-filter-field--compact">
-                <label className="form-label">Date</label>
-                <div className="input-group">
-                  <span className="input-group-text bg-light">
-                    <i className="bi bi-calendar text-muted"></i>
-                  </span>
-                  <input
-                    className="form-control"
-                    type="date"
-                    value={filters.date}
-                    onChange={(event) => setFilters((current) => ({ ...current, date: event.target.value }))}
-                  />
-                </div>
-              </div>
-
-              <div className="drive-filter-field drive-filter-field--compact">
-                <label className="form-label">Vaccine Type</label>
-                <select
-                  className="form-select"
-                  value={filters.vaccineType}
-                  onChange={(event) => setFilters((current) => ({ ...current, vaccineType: event.target.value }))}
-                >
-                  <option value="">All vaccines</option>
-                  {VACCINE_OPTIONS.map((option) => (
-                    <option key={option} value={option}>{option}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="drive-filter-field drive-filter-field--compact">
-                <label className="form-label">Availability</label>
-                <select
-                  className="form-select"
-                  value={filters.availability}
-                  onChange={(event) => setFilters((current) => ({ ...current, availability: event.target.value }))}
-                >
-                  <option value="">All statuses</option>
-                  {AVAILABILITY_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="drive-filter-field drive-filter-field--compact">
-                <label className="form-label">Slot Window</label>
-                <select
-                  className="form-select"
-                  value={filters.slot}
-                  onChange={(event) => setFilters((current) => ({ ...current, slot: event.target.value }))}
-                >
-                  <option value="">All time windows</option>
-                  {SLOT_OPTIONS.map((option) => (
-                    <option key={option} value={option}>{option}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {activeFilters.length > 0 ? (
-              <div className="drive-filters__review-row">
-                <span className="drive-filters__review-label">Active filters</span>
-                <div className="drive-filters__chips">
-                  {activeFilters.map((filter) => (
-                    <button
-                      key={filter.key}
-                      type="button"
-                      className="drive-filter-chip"
-                      onClick={() => setFilters((current) => ({ ...current, [filter.key]: "" }))}
-                    >
-                      <span>{filter.label}</span>
-                      <i className="bi bi-x-lg"></i>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <div className="drive-filters__empty-note">
-                <i className="bi bi-check-circle"></i>
-                <span>All live filters are cleared. Showing all matching drives.</span>
-              </div>
-            )}
-          </div>
-        </div>
+        )}
 
         {loading ? (
-          <div className="text-center py-5">
-            <div className="spinner-border text-primary" role="status">
-              <span className="visually-hidden">Loading...</span>
+          <div className="mb-4 drives-page__filter-card">
+            <SkeletonFilterCard />
+          </div>
+        ) : (
+          <div className="card border-0 shadow-sm mb-4 drives-page__filter-card">
+            <div className="card-body drive-filters">
+              <div className="drive-filters__header">
+                <div>
+                  <span className="drive-filters__eyebrow">Live Search</span>
+                  <h4 className="drive-filters__title">Refine drives instantly</h4>
+                  <p className="drive-filters__copy mb-0">Filters apply automatically as you type or choose options.</p>
+                  {isAuthenticated() && Number.isFinite(Number(userProfile?.age)) && Number(userProfile?.age) > 0 ? (
+                    <p className="small text-muted mt-2 mb-0">Showing drives prioritized for age {userProfile.age}.</p>
+                  ) : isAuthenticated() ? (
+                    <p className="small text-muted mt-2 mb-0">Add your date of birth to your profile to unlock automatic eligibility filtering.</p>
+                  ) : null}
+                </div>
+                <div className="drive-filters__header-actions">
+                  <div className="drive-filters__result-pill" aria-live="polite">
+                    <strong>{filteredDrives.length}</strong>
+                    <span>{filteredDrives.length === 1 ? "drive" : "drives"}</span>
+                  </div>
+                  <button className="btn btn-outline-secondary drive-filters__clear-btn" onClick={clearFilters} disabled={loading}>
+                    <i className="bi bi-arrow-counterclockwise me-2"></i>Clear filters
+                  </button>
+                </div>
+              </div>
+
+              <div className="drive-filters__grid">
+                <div className="drive-filter-field drive-filter-field--search">
+                  <label className="form-label">Smart Search</label>
+                  <SearchInput
+                    value={search}
+                    onChange={(value) => {
+                      setSearch(value);
+                      setVisibleCount(DEFAULT_VISIBLE_COUNT);
+                    }}
+                    placeholder="Search drives by title, center, city, vaccine"
+                    icon="search"
+                    onClear={() => {
+                      setSearch("");
+                      setVisibleCount(DEFAULT_VISIBLE_COUNT);
+                    }}
+                  />
+                </div>
+
+                <div className="drive-filter-field">
+                  <label className="form-label">City</label>
+                  <CityAutocomplete
+                    value={filters.city}
+                    onChange={(city) => setFilters((current) => ({ ...current, city }))}
+                    onSelect={(city) => setFilters((current) => ({ ...current, city }))}
+                    onEnter={(enteredCity) => setFilters((current) => ({ ...current, city: enteredCity }))}
+                    placeholder="Search by city"
+                  />
+                </div>
+
+                <div className="drive-filter-field drive-filter-field--compact">
+                  <label className="form-label">Date</label>
+                  <div className="input-group">
+                    <span className="input-group-text bg-light">
+                      <i className="bi bi-calendar text-muted"></i>
+                    </span>
+                    <input
+                      className="form-control"
+                      type="date"
+                      value={filters.date}
+                      onChange={(event) => setFilters((current) => ({ ...current, date: event.target.value }))}
+                    />
+                  </div>
+                </div>
+
+                <div className="drive-filter-field drive-filter-field--compact">
+                  <label className="form-label">Vaccine Type</label>
+                  <select
+                    className="form-select"
+                    value={filters.vaccineType}
+                    onChange={(event) => setFilters((current) => ({ ...current, vaccineType: event.target.value }))}
+                  >
+                    <option value="">All vaccines</option>
+                    {VACCINE_OPTIONS.map((option) => (
+                      <option key={option} value={option}>{option}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="drive-filter-field drive-filter-field--compact">
+                  <label className="form-label">Availability</label>
+                  <select
+                    className="form-select"
+                    value={filters.availability}
+                    onChange={(event) => setFilters((current) => ({ ...current, availability: event.target.value }))}
+                  >
+                    <option value="">All statuses</option>
+                    {AVAILABILITY_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="drive-filter-field drive-filter-field--compact">
+                  <label className="form-label">Slot Window</label>
+                  <select
+                    className="form-select"
+                    value={filters.slot}
+                    onChange={(event) => setFilters((current) => ({ ...current, slot: event.target.value }))}
+                  >
+                    <option value="">All time windows</option>
+                    {SLOT_OPTIONS.map((option) => (
+                      <option key={option} value={option}>{option}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {activeFilters.length > 0 ? (
+                <div className="drive-filters__review-row">
+                  <span className="drive-filters__review-label">Active filters</span>
+                  <div className="drive-filters__chips">
+                    {activeFilters.map((filter) => (
+                      <button
+                        key={filter.key}
+                        type="button"
+                        className="drive-filter-chip"
+                        onClick={() => setFilters((current) => ({ ...current, [filter.key]: "" }))}
+                      >
+                        <span>{filter.label}</span>
+                        <i className="bi bi-x-lg"></i>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="drive-filters__empty-note">
+                  <i className="bi bi-check-circle"></i>
+                  <span>All live filters are cleared. Showing all matching drives.</span>
+                </div>
+              )}
             </div>
-            <p className="mt-3 text-muted">Loading vaccination drives...</p>
+          </div>
+        )}
+
+        {loading ? (
+          <div className="py-2">
+            <SkeletonDriveCards count={6} viewMode={viewMode} />
           </div>
         ) : error ? (
           <div className="empty-state">
@@ -748,119 +896,15 @@ export default function DrivesPage() {
 
             <div className={viewMode === "grid" ? "row g-4" : "d-flex flex-column gap-3"}>
               {displayedDrives.map((drive, index) => (
-                <div key={drive.id} className={`${viewMode === "grid" ? "col-md-6 col-lg-4" : ""} fade-in stagger-${(index % 6) + 1}`}>
-                  <div className={`drive-card h-100 ${viewMode === "list" ? "drive-card--list" : ""} ${drive.isEligible === false ? "drive-card--ineligible" : ""}`}>
-                    {viewMode === "grid" ? (
-                      <div className="card-header d-flex justify-content-between align-items-center">
-                        <h5 className="mb-0 fs-6">{drive.name}</h5>
-                        {drive.isEligible === false ? (
-                          <span className="badge bg-secondary-subtle text-secondary-emphasis">{drive.eligibilityLabel}</span>
-                        ) : !drive.hasSlots ? (
-                          <span className="badge bg-warning">No Slots</span>
-                        ) : isDriveBookable(drive, now) ? (
-                          <span className="badge bg-white text-primary">{drive.availableSlots} left</span>
-                        ) : (
-                          <span className="badge bg-danger">{drive.availableSlots > 0 ? "Expired" : "Full"}</span>
-                        )}
-                      </div>
-                    ) : null}
-                    <div className={`card-body ${viewMode === "list" ? "d-flex flex-row align-items-center gap-4 drive-card__body--list" : ""}`}>
-                      {viewMode === "list" ? (
-                        <div className="text-center p-3 bg-primary bg-opacity-10 rounded">
-                          <i className="bi bi-calendar-event display-6 text-primary"></i>
-                        </div>
-                      ) : null}
-                      <div className="flex-grow-1">
-                        {viewMode === "list" ? (
-                          <div className="d-flex justify-content-between align-items-start mb-2 drive-card__list-header">
-                            <h5 className="fw-bold mb-0">{drive.name}</h5>
-                            {drive.isEligible === false ? (
-                              <span className="badge bg-secondary-subtle text-secondary-emphasis">{drive.eligibilityLabel}</span>
-                            ) : !drive.hasSlots ? (
-                              <span className="badge bg-warning">No Slots</span>
-                            ) : isDriveBookable(drive, now) ? (
-                              <span className="badge bg-success">{drive.availableSlots} slots left</span>
-                            ) : (
-                              <span className="badge bg-danger">{drive.availableSlots > 0 ? "Expired" : "Full"}</span>
-                            )}
-                          </div>
-                        ) : null}
-                        <div className="d-flex align-items-center gap-2 mb-3 flex-wrap">
-                          <span className={`badge ${getStatusBadgeClass(getRealtimeStatus(drive.startDateTime, drive.endDateTime, now))}`}>
-                            {getRealtimeStatus(drive.startDateTime, drive.endDateTime, now)}
-                          </span>
-                          <small className="text-muted">
-                            {getCountdownLabel(
-                              getRealtimeStatus(drive.startDateTime, drive.endDateTime, now),
-                              drive.startDateTime,
-                              drive.endDateTime,
-                              now
-                            )}
-                          </small>
-                        </div>
-                        <div className="row g-2">
-                          <div className="col-6">
-                            <div className="info-item">
-                              <i className="bi bi-calendar-event"></i>
-                              <span>{new Date(drive.date).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}</span>
-                            </div>
-                          </div>
-                          <div className="col-6">
-                            <div className="info-item">
-                              <i className="bi bi-clock"></i>
-                              <span>{drive.startTime} - {drive.endTime}</span>
-                            </div>
-                          </div>
-                          <div className="col-6">
-                            <div className="info-item">
-                              <i className="bi bi-building"></i>
-                              <span>{drive.centerName}</span>
-                            </div>
-                          </div>
-                          <div className="col-6">
-                            <div className="info-item">
-                              <i className="bi bi-broadcast"></i>
-                              <span>{getRealtimeStatus(drive.startDateTime, drive.endDateTime, now)}</span>
-                            </div>
-                          </div>
-                          <div className="col-6">
-                            <div className="info-item">
-                              <i className="bi bi-geo-alt"></i>
-                              <span>{drive.centerCity || filters.city || "N/A"}</span>
-                            </div>
-                          </div>
-                          <div className="col-6">
-                            <div className="info-item">
-                              <span className="drive-age-text">Age: {drive.ageLabel || `${drive.minAge}+`}</span>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="mt-3">
-                          <div className="d-flex justify-content-between mb-1">
-                            <small className="text-muted">Capacity</small>
-                            <small className="text-muted">{drive.availableSlots}/{drive.totalSlots}</small>
-                          </div>
-                          <div className="slots-progress">
-                            <div
-                              className="progress-bar"
-                              style={{ width: `${drive.totalSlots > 0 ? ((drive.totalSlots - drive.availableSlots) / drive.totalSlots) * 100 : 0}%` }}
-                            ></div>
-                          </div>
-                        </div>
-                        {drive.isEligible === false ? (
-                          <div className="drive-eligibility-note">
-                            <i className="bi bi-info-circle"></i>
-                            <span>{drive.eligibilityReason}</span>
-                          </div>
-                        ) : null}
-                      </div>
-                    </div>
-                    <div className="card-footer border-top-0 pt-0">
-                      {renderBookButton(drive)}
-                    </div>
-                  </div>
-                </div>
+                <DriveResultCard
+                  key={drive.id}
+                  drive={drive}
+                  index={index}
+                  now={now}
+                  viewMode={viewMode}
+                  filters={filters}
+                  renderBookButton={renderBookButton}
+                />
               ))}
             </div>
             {shouldShowViewMore(filteredDrives, search, visibleCount) ? (

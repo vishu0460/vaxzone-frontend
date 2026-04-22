@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Button } from "react-bootstrap";
 import {
   getCountdownLabel,
-  getRealtimeStatus,
+  getSlotRealtimeStatus,
   getStatusBadgeClass,
   isAtCapacity,
   isSlotBookable
@@ -273,41 +273,17 @@ export default function DriveBookingModal({
                 </thead>
                 <tbody>
                   {slots.map((slot) => (
-                    <tr key={slot.id}>
-                      <td>#{slot.id}</td>
-                      <td>{slot.startDateTime ? new Date(slot.startDateTime).toLocaleString() : "N/A"}</td>
-                      <td>{slot.endDateTime ? new Date(slot.endDateTime).toLocaleString() : "N/A"}</td>
-                      <td>
-                        <div className="d-flex flex-column gap-1">
-                          <span className={`badge ${getStatusBadgeClass(slot.slotStatus || getRealtimeStatus(slot.startDateTime, slot.endDateTime, now))}`}>
-                            {slot.slotStatus || getRealtimeStatus(slot.startDateTime, slot.endDateTime, now)}
-                          </span>
-                          <small className="text-muted">
-                            {getCountdownLabel(slot.slotStatus || getRealtimeStatus(slot.startDateTime, slot.endDateTime, now), slot.startDateTime, slot.endDateTime, now)}
-                          </small>
-                        </div>
-                      </td>
-                      <td>{slot.availableCapacity}</td>
-                      <td className="text-end">
-                        <div className="drives-page__slot-actions">
-                          {isAdmin ? (
-                            <Button onClick={() => handleAdminBooking(slot)} disabled={bookingSubmittingId === slot.id}>
-                              {bookingSubmittingId === slot.id ? "Booking..." : "Confirm Booking"}
-                            </Button>
-                          ) : isSlotBookable(slot, now) ? (
-                            <Button onClick={() => handleUserBooking(slot)} disabled={bookingSubmittingId === slot.id}>
-                              {bookingSubmittingId === slot.id ? "Booking..." : "Book Now"}
-                            </Button>
-                          ) : isAtCapacity(slot) ? (
-                            <Button variant="outline-warning" onClick={() => onJoinWaitlist(slot)} disabled={waitlistSubmittingId === slot.id}>
-                              {waitlistSubmittingId === slot.id ? "Joining..." : "Join Waitlist"}
-                            </Button>
-                          ) : (
-                            <Button disabled>Expired</Button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
+                    <SlotRow
+                      key={slot.id}
+                      slot={slot}
+                      now={now}
+                      isAdmin={isAdmin}
+                      bookingSubmittingId={bookingSubmittingId}
+                      waitlistSubmittingId={waitlistSubmittingId}
+                      onAdminBookSlot={handleAdminBooking}
+                      onUserBookSlot={handleUserBooking}
+                      onJoinWaitlist={onJoinWaitlist}
+                    />
                   ))}
                 </tbody>
               </table>
@@ -316,5 +292,56 @@ export default function DriveBookingModal({
         </Modal.Body>
       </Modal>
     </>
+  );
+}
+
+function SlotRow({
+  slot,
+  now,
+  isAdmin,
+  bookingSubmittingId,
+  waitlistSubmittingId,
+  onAdminBookSlot,
+  onUserBookSlot,
+  onJoinWaitlist
+}) {
+  const slotStatus = getSlotRealtimeStatus(slot, now);
+
+  return (
+    <tr>
+      <td>#{slot.id}</td>
+      <td>{slot.startDateTime ? new Date(slot.startDateTime).toLocaleString() : "N/A"}</td>
+      <td>{slot.endDateTime ? new Date(slot.endDateTime).toLocaleString() : "N/A"}</td>
+      <td>
+        <div className="d-flex flex-column gap-1">
+          <span className={`badge ${getStatusBadgeClass(slotStatus)}`}>
+            {slotStatus}
+          </span>
+          <small className="text-muted">
+            {getCountdownLabel(slotStatus, slot.startDateTime, slot.endDateTime, now)}
+          </small>
+        </div>
+      </td>
+      <td>{slot.availableCapacity}</td>
+      <td className="text-end">
+        <div className="drives-page__slot-actions">
+          {isAdmin ? (
+            <Button onClick={() => onAdminBookSlot(slot)} disabled={bookingSubmittingId === slot.id}>
+              {bookingSubmittingId === slot.id ? "Booking..." : "Confirm Booking"}
+            </Button>
+          ) : isSlotBookable(slot, now) ? (
+            <Button onClick={() => onUserBookSlot(slot)} disabled={bookingSubmittingId === slot.id}>
+              {bookingSubmittingId === slot.id ? "Booking..." : "Book Now"}
+            </Button>
+          ) : isAtCapacity(slot) ? (
+            <Button variant="outline-warning" onClick={() => onJoinWaitlist(slot)} disabled={waitlistSubmittingId === slot.id}>
+              {waitlistSubmittingId === slot.id ? "Joining..." : "Join Waitlist"}
+            </Button>
+          ) : (
+            <Button disabled>Expired</Button>
+          )}
+        </div>
+      </td>
+    </tr>
   );
 }

@@ -5,6 +5,7 @@ import api, { certificateAPI, newsAPI, publicAPI, unwrapApiData } from "../api/c
 import ModalPopup from "../components/ModalPopup";
 import Modal from "../components/ui/Modal";
 import Seo from "../components/Seo";
+import { SkeletonDashboardPage, SkeletonSlotCards } from "../components/Skeleton";
 import useCurrentTime from "../hooks/useCurrentTime";
 import { getCountdownLabel, getRealtimeStatus, getStatusBadgeClass, isAtCapacity, isSlotBookable } from "../utils/realtimeStatus";
 import { compareBookingsByAppointmentStart, getBookingAppointmentStart, isBookingUpcoming } from "../utils/bookingSchedule";
@@ -1403,13 +1404,7 @@ export default function UserBookingsPage() {
   const getCertificateForBooking = (bookingId) => certificates.find((certificate) => certificate.bookingId === bookingId);
 
   if (loading) {
-    return (
-      <div className="d-flex justify-content-center align-items-center" style={{ minHeight: "50vh" }}>
-        <div className="spinner-border text-primary" role="status">
-          <span className="visually-hidden">Loading...</span>
-        </div>
-      </div>
-    );
+    return <SkeletonDashboardPage />;
   }
 
   return (
@@ -1761,18 +1756,7 @@ export default function UserBookingsPage() {
           ) : null}
 
           {slotsLoading || (catalogLoading && !slotsLoaded) ? (
-            <div className="slot-card-grid" aria-label="Loading slots">
-              {[0, 1, 2].map((item) => (
-                <div className="slot-result-card slot-result-card--loading" key={item}>
-                  <div className="placeholder-glow">
-                    <span className="placeholder col-5 mb-3"></span>
-                    <span className="placeholder col-12 mb-2"></span>
-                    <span className="placeholder col-10 mb-2"></span>
-                    <span className="placeholder col-7"></span>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <SkeletonSlotCards count={3} />
           ) : filteredSortedSlots.length === 0 ? (
             <div className="empty-state user-dashboard-empty">
               <i className="bi bi-calendar-x"></i>

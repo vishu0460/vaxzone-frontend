@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { getErrorMessage, publicAPI, unwrapApiData } from "../api/client";
+import { SkeletonCenterCards } from "./Skeleton";
 
 export default function NearbyCentersSection() {
   const [loading, setLoading] = useState(false);
@@ -61,6 +62,12 @@ export default function NearbyCentersSection() {
             <i className="bi bi-geo-alt"></i>
             <h5>Nearby centers unavailable</h5>
             <p>{error}</p>
+          </div>
+        ) : null}
+
+        {loading && !data?.centers?.length ? (
+          <div className="mt-4">
+            <SkeletonCenterCards count={4} />
           </div>
         ) : null}
 

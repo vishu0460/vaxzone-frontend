@@ -1,4 +1,5 @@
 import React from "react";
+import Skeleton from "./Skeleton";
 
 export default function DropdownSuggestions({
   open,
@@ -21,7 +22,15 @@ export default function DropdownSuggestions({
 
   return (
     <div id={id} className={`dropdown-suggestions ${className}`.trim()} role="listbox">
-      {loading ? <div className="dropdown-suggestions__status">Loading results...</div> : null}
+      {loading ? (
+        <div className="dropdown-suggestions__status dropdown-suggestions__status--skeleton" aria-hidden="true">
+          {[0, 1, 2].map((item) => (
+            <div key={item} className="dropdown-suggestions__skeleton-row">
+              <Skeleton width={item === 2 ? "56%" : "72%"} height={16} />
+            </div>
+          ))}
+        </div>
+      ) : null}
       {!loading && error ? <div className="dropdown-suggestions__status is-error">{error}</div> : null}
       {!loading && !error && items.map((item, index) => (
         <button

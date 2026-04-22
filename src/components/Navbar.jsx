@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Spinner } from "react-bootstrap";
 import { notificationAPI, unwrapApiData } from "../api/client";
 import { clearAuth, getDefaultAuthenticatedPath, getRole, isAuthenticated } from "../utils/auth";
 import { footerLegalLinks, getFooterContent } from "../utils/navigationLinks";
 import { connectNotificationSocket } from "../utils/notificationSocket";
+import { SkeletonNotificationList } from "./Skeleton";
 import Modal from "./ui/Modal";
 import ThemeToggle from "./ThemeToggle";
 
@@ -375,9 +375,7 @@ export default function Navbar() {
         </Modal.Header>
         <Modal.Body className="notification-modal-body">
           {loadingNotifications ? (
-            <div className="text-center py-4">
-              <Spinner animation="border" variant="primary" />
-            </div>
+            <SkeletonNotificationList />
           ) : notifications.length === 0 ? (
             <div className="text-center text-muted py-4">No notifications yet.</div>
           ) : (

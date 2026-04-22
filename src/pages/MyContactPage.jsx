@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Container, Row, Col, Card, Badge, Spinner, Alert, Button, Form } from 'react-bootstrap';
+import { Container, Row, Col, Card, Badge, Alert, Button, Form } from 'react-bootstrap';
 import { contactAPI, getErrorMessage, unwrapApiData, userAPI } from '../api/client';
 import SearchInput from '../components/SearchInput';
+import { SkeletonHistoryCards } from '../components/Skeleton';
 import { DEFAULT_VISIBLE_COUNT, getDisplayedItems, matchesSmartSearch, shouldShowViewMore } from '../utils/listSearch';
 
 const notifyDataUpdated = () => {
@@ -146,9 +147,12 @@ export default function MyContactPage() {
 
   if (loading) {
     return (
-      <Container className="py-5 text-center">
-        <Spinner animation="border" variant="primary" />
-        <p className="mt-3">Loading your inquiries...</p>
+      <Container className="py-4">
+        <div className="d-flex justify-content-between align-items-center mb-4">
+          <h2>Contact History</h2>
+          <Button variant="primary" disabled>New Inquiry</Button>
+        </div>
+        <SkeletonHistoryCards />
       </Container>
     );
   }

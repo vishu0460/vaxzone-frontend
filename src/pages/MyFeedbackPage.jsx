@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Container, Row, Col, Card, Badge, Spinner, Alert, Button } from 'react-bootstrap';
+import { Container, Row, Col, Card, Badge, Alert, Button } from 'react-bootstrap';
 import { feedbackAPI, unwrapApiData } from '../api/client';
 import SearchInput from '../components/SearchInput';
+import { SkeletonHistoryCards } from '../components/Skeleton';
 import { DEFAULT_VISIBLE_COUNT, getDisplayedItems, matchesSmartSearch, shouldShowViewMore } from '../utils/listSearch';
 
 export default function MyFeedbackPage() {
@@ -49,9 +50,9 @@ export default function MyFeedbackPage() {
 
   if (loading) {
     return (
-      <Container className="py-5 text-center">
-        <Spinner animation="border" variant="primary" />
-        <p className="mt-3">Loading your feedback...</p>
+      <Container className="py-4">
+        <h2 className="mb-4">My Feedback & Responses</h2>
+        <SkeletonHistoryCards />
       </Container>
     );
   }

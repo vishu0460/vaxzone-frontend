@@ -604,6 +604,27 @@ hr {
   color: var(--danger-color);
 }
 
+.dropdown-suggestions__status--skeleton {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.dropdown-suggestions__skeleton-row {
+  padding: 0.1rem 0;
+}
+
+.skeleton-surface {
+  padding: 1.2rem 1.25rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  background: var(--surface-color);
+  box-shadow: var(--shadow-xs);
+}
+
+.skeleton-metric-tile {
+  min-height: 132px;
+}
+
 .card,
 .modal-content,
 .dropdown-menu {
@@ -651,6 +672,16 @@ hr {
 .drive-card--ineligible:hover {
   transform: none;
   box-shadow: var(--shadow-xs);
+}
+
+.skeleton-drive-card:hover,
+.skeleton-center-card:hover,
+.slot-result-card--loading:hover {
+  transform: none;
+}
+
+.skeleton-drive-card__icon {
+  flex: 0 0 auto;
 }
 
 .card-header,
