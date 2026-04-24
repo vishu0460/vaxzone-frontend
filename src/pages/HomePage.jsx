@@ -176,7 +176,7 @@ export default function HomePage() {
 
   const openAdminDriveAction = (drive, actionType) => {
     navigate({
-      pathname: getAdminDriveActionPath(actionType),
+      pathname: getAdminDriveActionPath(actionType, drive.id),
       search: buildAdminDriveActionSearch(drive.id, actionType)
     }, {
       state: buildAdminDriveActionState(drive.id, actionType)

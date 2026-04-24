@@ -19,7 +19,7 @@ import AdminCertificatesPanel from '../components/admin/AdminCertificatesPanel';
 import SmartImportPanel from '../components/admin/SmartImportPanel';
 import useCurrentTime from '../hooks/useCurrentTime';
 import { getRole } from '../utils/auth';
-import { ADMIN_DRIVE_ACTION_TYPES } from '../utils/adminDriveActions';
+import { ADMIN_DRIVE_ACTION_TYPES, getAdminDriveSlotsPath } from '../utils/adminDriveActions';
 import { errorToast, infoToast, successToast } from '../utils/toast';
 import { getCountdownLabel, getRealtimeStatus } from '../utils/realtimeStatus';
 import { broadcastDataUpdated, debugDataSync, subscribeToDataUpdates } from '../utils/dataSync';
@@ -1809,6 +1809,14 @@ export default function AdminDashboardPage() {
     await loadDriveSlots(drive.id, true);
   };
 
+  const openDriveSlotsPage = useCallback((driveId) => {
+    if (!driveId) {
+      return;
+    }
+
+    navigate(getAdminDriveSlotsPath(driveId));
+  }, [navigate]);
+
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
     const pendingAction = location.state?.adminDriveAction || (
@@ -2868,6 +2876,90 @@ export default function AdminDashboardPage() {
     setShowContactModal(true);
   };
 
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    const openAction = searchParams.get('open');
+    const requestedContactId = Number(searchParams.get('contactId'));
+
+    if (!openAction) {
+      return;
+    }
+
+    let cancelled = false;
+    const clearPendingAction = () => navigate({ pathname: location.pathname }, { replace: true });
+
+    const openRequestedAction = async () => {
+      try {
+        if (openAction === 'create-center') {
+          setShowCenterModal(true);
+          clearPendingAction();
+          return;
+        }
+
+        if (openAction === 'create-drive') {
+          await handleOpenDriveModal();
+          if (!cancelled) {
+            clearPendingAction();
+          }
+          return;
+        }
+
+        if (openAction === 'create-slot') {
+          await handleOpenSlotModal();
+          if (!cancelled) {
+            clearPendingAction();
+          }
+          return;
+        }
+
+        if (openAction === 'create-news') {
+          setShowNewsModal(true);
+          clearPendingAction();
+          return;
+        }
+
+        if (openAction === 'reply-contact') {
+          const response = await adminAPI.getAllContacts();
+          const nextContacts = ensureArray(unwrapApiData(response));
+
+          if (cancelled) {
+            return;
+          }
+
+          setContacts(nextContacts);
+          const matchedContact = (Number.isFinite(requestedContactId) && requestedContactId > 0
+            ? nextContacts.find((contact) => Number(contact.id) === requestedContactId)
+            : null)
+            || nextContacts.find((contact) => String(contact.status || '').toUpperCase() !== 'REPLIED')
+            || nextContacts[0];
+
+          if (matchedContact) {
+            openContactModal(matchedContact);
+          } else {
+            infoToast('No contact requests are available right now.');
+          }
+
+          clearPendingAction();
+        }
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        const message = getErrorMessage(error, 'Unable to open the requested admin action.');
+        setError(message);
+        errorToast(message);
+        clearPendingAction();
+      }
+    };
+
+    openRequestedAction();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [location.pathname, location.search, navigate]);
+
   const renderViewMoreButton = (tab, items, searchValue) => (
     shouldShowViewMore(items, searchValue, visibleCounts[tab]) ? (
       <div className="text-center mt-4">
@@ -3810,7 +3902,7 @@ export default function AdminDashboardPage() {
                         <Button variant="outline-primary" size="sm" onClick={() => openEditDriveModal(drive)} style={{borderRadius: '0.375rem'}}>
                           Edit Drive
                         </Button>
-                        <Button variant="outline-info" size="sm" onClick={() => openManageSlotsModal(drive)} style={{borderRadius: '0.375rem'}}>
+                        <Button variant="outline-info" size="sm" onClick={() => openDriveSlotsPage(drive.id)} style={{borderRadius: '0.375rem'}}>
                           Slots
                         </Button>
                         <Button variant="outline-primary" size="sm" onClick={() => handleOpenSlotModal(drive)} style={{borderRadius: '0.375rem'}}>

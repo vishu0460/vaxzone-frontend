@@ -13,6 +13,7 @@ const RegisterPage = lazy(() => import("../pages/RegisterPage"));
 const ForgotPasswordPage = lazy(() => import("../pages/ForgotPasswordPage"));
 const ResetPasswordPage = lazy(() => import("../pages/ResetPasswordPage"));
 const AdminDashboardPage = lazy(() => import("../pages/AdminDashboardPage"));
+const AdminDriveSlotsPage = lazy(() => import("../pages/AdminDriveSlotsPage"));
 const UserBookingsPage = lazy(() => import("../pages/UserBookingsPage"));
 const NotFoundPage = lazy(() => import("../pages/NotFoundPage"));
 const PrivacyPolicyPage = lazy(() => import("../pages/PrivacyPolicyPage"));
@@ -122,6 +123,16 @@ export default function AppRoutes() {
           )}
         />
 
+        <Route
+          path="/admin/drives/:driveId/slots"
+          element={(
+            <ProtectedRoute roles={["ADMIN", "SUPER_ADMIN"]}>
+              <PageErrorBoundary resetKey="/admin/drives/:driveId/slots">
+                <AdminDriveSlotsPage />
+              </PageErrorBoundary>
+            </ProtectedRoute>
+          )}
+        />
         <Route
           path="/admin/dashboard"
           element={(

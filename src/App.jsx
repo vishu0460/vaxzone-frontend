@@ -4,6 +4,7 @@ import AppRoutes from "./routes/AppRoutes";
 import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
 import ScrollToTop from "./components/ScrollToTop";
+import VaxZoneChatbot from "./components/chatbot/VaxZoneChatbot";
 import { ThemeProvider } from "./context/ThemeContext";
 import { PublicCatalogProvider } from "./context/PublicCatalogContext";
 
@@ -25,6 +26,7 @@ export default function App() {
             <AppRoutes />
           </main>
           <Footer />
+          <VaxZoneChatbot />
         </div>
       </PublicCatalogProvider>
     </ThemeProvider>

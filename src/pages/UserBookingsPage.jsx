@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { jsPDF } from "jspdf";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import api, { certificateAPI, newsAPI, publicAPI, unwrapApiData } from "../api/client";
+import api, { certificateAPI, newsAPI, publicAPI, unwrapApiData, userAPI } from "../api/client";
 import ModalPopup from "../components/ModalPopup";
 import Modal from "../components/ui/Modal";
 import Seo from "../components/Seo";
@@ -406,6 +406,7 @@ export default function UserBookingsPage() {
   const [bookingError, setBookingError] = useState("");
   const [activeTab, setActiveTab] = useState("bookings");
   const [bookingToCancel, setBookingToCancel] = useState(null);
+  const [bookingToReschedule, setBookingToReschedule] = useState(null);
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [slotActionLoading, setSlotActionLoading] = useState(false);
   const [lastAppointmentLink, setLastAppointmentLink] = useState("");
@@ -756,7 +757,7 @@ export default function UserBookingsPage() {
   }, [bookings, location.hash, location.pathname, location.search, navigate, notifications]);
 
   const buildBookingPayload = (slotId) => {
-    const selectedSlot = availableSlots.find((slot) => slot.id === slotId);
+    const selectedSlot = slotCatalog.find((slot) => slot.id === slotId) || availableSlots.find((slot) => slot.id === slotId);
     return {
       slotId,
       driveId: selectedSlot?.driveId
@@ -1229,6 +1230,50 @@ export default function UserBookingsPage() {
     }
   };
 
+  const rescheduleBooking = async (slotId) => {
+    if (!bookingToReschedule?.id) {
+      return;
+    }
+
+    try {
+      setBookingError("");
+      setSlotActionLoading(true);
+      const payload = buildBookingPayload(slotId);
+      const response = await userAPI.rescheduleBooking(bookingToReschedule.id, payload);
+      const booking = unwrapApiData(response);
+      const selectedSlotDetails = slotCatalog.find((slot) => Number(slot.id) === Number(slotId));
+      const assignedTime = booking?.assignedTime;
+
+      setMsg(
+        assignedTime
+          ? `Booking #${bookingToReschedule.id} rescheduled successfully. New appointment time: ${formatAppointmentTime(assignedTime)}`
+          : `Booking #${bookingToReschedule.id} rescheduled successfully.`
+      );
+      setSelectedSlot(null);
+      setManualSlotId("");
+      setBookingToReschedule(null);
+      broadcastDataUpdated({ source: "user-bookings-reschedule" });
+      await refreshCatalog();
+      await Promise.all([loadData({ silent: true }), loadAvailableSlots({ silent: true })]);
+      openDashboardTab("bookings", { replace: true });
+
+      if (selectedSlotDetails?.centerName) {
+        setLastBookedSlotSummary({
+          driveName: booking?.driveName || selectedSlotDetails.driveTitle,
+          centerName: booking?.centerName || selectedSlotDetails.centerName,
+          start: booking?.slotTime || selectedSlotDetails.startDateTime,
+          end: booking?.slotEndTime || selectedSlotDetails.endDateTime
+        });
+      }
+    } catch (error) {
+      const message = error.response?.data?.message || "Failed to reschedule booking. Please try again.";
+      setBookingError(message);
+      setMsg(message);
+    } finally {
+      setSlotActionLoading(false);
+    }
+  };
+
   const cancelBooking = async (id) => {
     try {
       await api.patch(`/user/bookings/${id}/cancel`);
@@ -1240,6 +1285,13 @@ export default function UserBookingsPage() {
     } catch (error) {
       setMsg(error.response?.data?.message || "Failed to cancel booking.");
     }
+  };
+
+  const startRescheduleBooking = (booking) => {
+    setBookingToReschedule(booking);
+    setBookingError("");
+    setMsg(`Choose a new slot for booking #${booking.id}.`);
+    openDashboardTab("slots");
   };
 
   const joinWaitlist = async (slotId) => {
@@ -1274,6 +1326,32 @@ export default function UserBookingsPage() {
     .filter((booking) => isBookingUpcoming(booking, now))
     .slice()
     .sort(compareBookingsByAppointmentStart)[0], [openBookings, now]);
+
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    const requestedAction = searchParams.get("action");
+    const requestedBookingId = Number(searchParams.get("bookingId"));
+
+    if (!requestedAction || !Number.isFinite(requestedBookingId) || requestedBookingId <= 0 || bookings.length === 0) {
+      return;
+    }
+
+    const matchedBooking = bookings.find((booking) => Number(booking.id) === requestedBookingId);
+    if (!matchedBooking) {
+      return;
+    }
+
+    if (requestedAction === "cancel") {
+      setBookingToCancel(matchedBooking);
+      openDashboardTab("bookings", { replace: true, behavior: "auto" });
+      return;
+    }
+
+    if (requestedAction === "reschedule") {
+      setBookingToReschedule(matchedBooking);
+      openDashboardTab("slots", { replace: true, behavior: "auto" });
+    }
+  }, [bookings, location.search, openDashboardTab]);
 
   const nextAppointmentValue = getBookingAppointmentStart(upcomingBooking);
 
@@ -1602,6 +1680,11 @@ export default function UserBookingsPage() {
                         </Link>
                       ) : null}
                       {(booking.status === "PENDING" || booking.status === "CONFIRMED") ? (
+                        <button className="btn btn-outline-secondary btn-sm" onClick={() => startRescheduleBooking(booking)}>
+                          <i className="bi bi-arrow-repeat me-1"></i>Reschedule
+                        </button>
+                      ) : null}
+                      {(booking.status === "PENDING" || booking.status === "CONFIRMED") ? (
                         <button className="btn btn-outline-danger btn-sm" onClick={() => setBookingToCancel(booking)}>
                           <i className="bi bi-x-circle me-1"></i>Cancel
                         </button>
@@ -1638,6 +1721,20 @@ export default function UserBookingsPage() {
               ) : null}
             </div>
           </div>
+
+          {bookingToReschedule ? (
+            <div className="alert alert-info d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3" role="alert">
+              <div>
+                <strong>Rescheduling booking #{bookingToReschedule.id}</strong>
+                <div className="small mt-1">
+                  Current appointment: {formatFriendlyDate(bookingToReschedule.assignedTime || bookingToReschedule.slotTime)} at {bookingToReschedule.centerName || "selected center"}
+                </div>
+              </div>
+              <button type="button" className="btn btn-outline-secondary btn-sm" onClick={() => setBookingToReschedule(null)}>
+                Keep current booking
+              </button>
+            </div>
+          ) : null}
 
           <div className="slot-filter-panel">
             <div className="slot-filter-panel__search">
@@ -1727,7 +1824,11 @@ export default function UserBookingsPage() {
                 onSubmit={(event) => {
                   event.preventDefault();
                   if (manualSlotId) {
-                    bookSlot(Number(manualSlotId));
+                    if (bookingToReschedule) {
+                      rescheduleBooking(Number(manualSlotId));
+                    } else {
+                      bookSlot(Number(manualSlotId));
+                    }
                   }
                 }}
                 className="slot-id-booking__form"
@@ -1742,7 +1843,9 @@ export default function UserBookingsPage() {
                   required
                 />
                 <button className="btn btn-outline-primary" type="submit" disabled={slotActionLoading}>
-                  {slotActionLoading ? "Booking..." : "Book by ID"}
+                  {slotActionLoading
+                    ? (bookingToReschedule ? "Rescheduling..." : "Booking...")
+                    : (bookingToReschedule ? "Reschedule by ID" : "Book by ID")}
                 </button>
               </form>
             </details>
@@ -1828,7 +1931,8 @@ export default function UserBookingsPage() {
                           <div className="slot-result-card__actions">
                             {bookable ? (
                               <button className="btn btn-primary" onClick={() => setSelectedSlot(slot)}>
-                                <i className="bi bi-bookmark-plus me-2"></i>Book This Slot
+                                <i className={`bi ${bookingToReschedule ? "bi-arrow-repeat" : "bi-bookmark-plus"} me-2`}></i>
+                                {bookingToReschedule ? "Choose This Slot" : "Book This Slot"}
                               </button>
                             ) : full ? (
                               <button className="btn btn-outline-warning" onClick={() => joinWaitlist(slot.id)} disabled={waitlistLoadingId === slot.id}>
@@ -1938,6 +2042,11 @@ export default function UserBookingsPage() {
         <Modal.Body>
           {selectedSlot ? (
             <div className="slot-booking-modal">
+              {bookingToReschedule ? (
+                <div className="alert alert-info mb-0">
+                  You are rescheduling booking <strong>#{bookingToReschedule.id}</strong>. Confirm the new slot below.
+                </div>
+              ) : null}
               <div className="slot-booking-modal__hero">
                 <div>
                   <div className="slot-booking-modal__eyebrow">{selectedSlot.driveTitle || selectedSlot.driveName || "Vaccination Slot"}</div>
@@ -1996,10 +2105,12 @@ export default function UserBookingsPage() {
           <button
             type="button"
             className="btn btn-primary"
-            onClick={() => selectedSlot && bookSlot(selectedSlot.id)}
+            onClick={() => selectedSlot && (bookingToReschedule ? rescheduleBooking(selectedSlot.id) : bookSlot(selectedSlot.id))}
             disabled={!selectedSlot || !isSlotBookable(selectedSlot, now) || slotActionLoading}
           >
-            {slotActionLoading ? "Booking..." : "Confirm Booking"}
+            {slotActionLoading
+              ? (bookingToReschedule ? "Rescheduling..." : "Booking...")
+              : (bookingToReschedule ? "Reschedule Booking" : "Confirm Booking")}
           </button>
         </Modal.Footer>
       </Modal>
