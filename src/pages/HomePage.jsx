@@ -1,9 +1,8 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import NearbyCentersSection from "../components/NearbyCentersSection";
+import AppLoadingFallback from "../components/AppLoadingFallback";
 import Seo from "../components/Seo";
 import { SkeletonDriveCards } from "../components/Skeleton";
-import SmartSearch from "../components/SmartSearch";
 import StatCard from "../components/StatCard";
 import useCurrentTime from "../hooks/useCurrentTime";
 import { getErrorMessage } from "../api/client";
@@ -12,6 +11,10 @@ import { getCountdownLabel, getDriveAvailabilityLabel, getDriveRealtimeStatus, g
 import { buildAdminDriveActionSearch, buildAdminDriveActionState, getAdminDriveActionPath, getUnavailableDriveAdminAction, isAdminDriveRole } from "../utils/adminDriveActions";
 import { getRole } from "../utils/auth";
 import { usePublicCatalog } from "../context/PublicCatalogContext";
+import { lazyWithRetry } from "../utils/lazyWithRetry";
+
+const SmartSearch = lazy(lazyWithRetry(() => import("../components/SmartSearch"), "home-smart-search"));
+const NearbyCentersSection = lazy(lazyWithRetry(() => import("../components/NearbyCentersSection"), "home-nearby-centers"));
 
 const mapDrive = (drive) => ({
   ...drive,
@@ -351,8 +354,12 @@ export default function HomePage() {
         </div>
       </section>
 
-      <SmartSearch />
-      <NearbyCentersSection />
+      <Suspense fallback={<AppLoadingFallback variant="section" title="Loading smart search" description="Preparing city, center, and drive suggestions." />}>
+        <SmartSearch />
+      </Suspense>
+      <Suspense fallback={<AppLoadingFallback variant="section" title="Loading nearby centers" description="Preparing location-based center discovery." />}>
+        <NearbyCentersSection />
+      </Suspense>
 
       <section className="py-5 bg-light">
         <div className="container">

@@ -1,14 +1,37 @@
-import React from "react";
+import React, { Suspense, lazy, useEffect } from "react";
 import { Toaster } from "react-hot-toast";
 import AppRoutes from "./routes/AppRoutes";
 import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
 import ScrollToTop from "./components/ScrollToTop";
-import VaxZoneChatbot from "./components/chatbot/VaxZoneChatbot";
+import AppLoadingFallback from "./components/AppLoadingFallback";
+import ChunkErrorBoundary from "./components/ChunkErrorBoundary";
 import { ThemeProvider } from "./context/ThemeContext";
 import { PublicCatalogProvider } from "./context/PublicCatalogContext";
+import { isAuthenticated, getRole } from "./utils/auth";
+import { openSiteExitFeedbackWindow } from "./utils/feedbackPrompt";
+import { lazyWithRetry } from "./utils/lazyWithRetry";
+
+const VaxZoneChatbot = lazy(lazyWithRetry(() => import("./components/chatbot/VaxZoneChatbot"), "chatbot"));
 
 export default function App() {
+  useEffect(() => {
+    const handlePotentialSiteExit = () => {
+      const role = isAuthenticated() ? getRole() : null;
+      openSiteExitFeedbackWindow({
+        role,
+        pathname: window.location.pathname,
+        returnTo: "/",
+        subject: "website"
+      });
+    };
+
+    window.addEventListener("beforeunload", handlePotentialSiteExit);
+    return () => {
+      window.removeEventListener("beforeunload", handlePotentialSiteExit);
+    };
+  }, []);
+
   return (
     <ThemeProvider>
       <PublicCatalogProvider>
@@ -26,7 +49,11 @@ export default function App() {
             <AppRoutes />
           </main>
           <Footer />
-          <VaxZoneChatbot />
+          <ChunkErrorBoundary resetKey="chatbot" title="Ask VaxZone is unavailable" message="Refresh the page to reopen the assistant.">
+            <Suspense fallback={<AppLoadingFallback variant="floating" />}>
+              <VaxZoneChatbot />
+            </Suspense>
+          </ChunkErrorBoundary>
         </div>
       </PublicCatalogProvider>
     </ThemeProvider>

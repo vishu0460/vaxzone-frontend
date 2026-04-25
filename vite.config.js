@@ -91,6 +91,47 @@ export default defineConfig(async () => {
     preview: {
       host: '0.0.0.0',
       port: 5173,
+    },
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (!id.includes('node_modules')) {
+              return undefined;
+            }
+
+            if (id.includes('react-router-dom') || id.includes('react-dom') || id.includes('/react/')) {
+              return 'react-vendor';
+            }
+
+            if (id.includes('jspdf')) {
+              return 'pdf-tools';
+            }
+
+            if (id.includes('html2canvas')) {
+              return 'canvas-tools';
+            }
+
+            if (id.includes('qrcode')) {
+              return 'qrcode-tools';
+            }
+
+            if (id.includes('chart.js') || id.includes('react-chartjs-2')) {
+              return 'chartjs-vendor';
+            }
+
+            if (id.includes('recharts')) {
+              return 'recharts-vendor';
+            }
+
+            if (id.includes('react-bootstrap') || id.includes('bootstrap')) {
+              return 'ui-vendor';
+            }
+
+            return undefined;
+          }
+        }
+      }
     }
   };
 });

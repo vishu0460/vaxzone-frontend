@@ -6,8 +6,9 @@ import { markAutoFeedbackSubmitted } from "../utils/feedbackPrompt";
 export default function FeedbackPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const initialSubject = searchParams.get("subject") || "";
   const [formData, setFormData] = useState({
-    subject: "",
+    subject: initialSubject,
     message: "",
     rating: 5
   });
@@ -31,13 +32,21 @@ export default function FeedbackPage() {
         markAutoFeedbackSubmitted(promptedBookingId);
       }
       setSubmitted(true);
-      setFormData({ subject: "", message: "", rating: 5 });
+      setFormData({ subject: initialSubject, message: "", rating: 5 });
     } catch (requestError) {
       setError(requestError.response?.data?.message || "Failed to submit feedback. Please try again.");
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    setFormData((current) => (
+      current.subject === initialSubject
+        ? current
+        : { ...current, subject: initialSubject }
+    ));
+  }, [initialSubject]);
 
   useEffect(() => {
     if (!submitted || !autoClose) {

@@ -1,52 +1,46 @@
 import React, { Suspense, lazy } from "react";
 import { Route, Routes } from "react-router-dom";
+import AppLoadingFallback from "../components/AppLoadingFallback";
+import ChunkErrorBoundary from "../components/ChunkErrorBoundary";
 import ProtectedRoute from "../components/ProtectedRoute";
 import PageErrorBoundary from "../components/PageErrorBoundary";
+import { lazyWithRetry } from "../utils/lazyWithRetry";
 
-const HomePage = lazy(() => import("../pages/HomePage"));
-const DrivesPage = lazy(() => import("../pages/DrivesPage"));
-const CentersPage = lazy(() => import("../pages/CentersPage"));
-const AboutPage = lazy(() => import("../pages/AboutPage"));
-const ContactPage = lazy(() => import("../pages/ContactPage"));
-const LoginPage = lazy(() => import("../pages/LoginPage"));
-const RegisterPage = lazy(() => import("../pages/RegisterPage"));
-const ForgotPasswordPage = lazy(() => import("../pages/ForgotPasswordPage"));
-const ResetPasswordPage = lazy(() => import("../pages/ResetPasswordPage"));
-const AdminDashboardPage = lazy(() => import("../pages/AdminDashboardPage"));
-const AdminDriveSlotsPage = lazy(() => import("../pages/AdminDriveSlotsPage"));
-const UserBookingsPage = lazy(() => import("../pages/UserBookingsPage"));
-const NotFoundPage = lazy(() => import("../pages/NotFoundPage"));
-const PrivacyPolicyPage = lazy(() => import("../pages/PrivacyPolicyPage"));
-const TermsConditionsPage = lazy(() => import("../pages/TermsConditionsPage"));
-const CopyrightPage = lazy(() => import("../pages/CopyrightPage"));
-const ContactLegalPage = lazy(() => import("../pages/ContactLegalPage"));
-const ProfilePage = lazy(() => import("../pages/ProfilePage"));
-const FeedbackPage = lazy(() => import("../pages/FeedbackPage"));
-const NewsPage = lazy(() => import("../pages/NewsPage"));
-const GuidePage = lazy(() => import("../pages/GuidePage"));
-const CertificatePage = lazy(() => import("../pages/CertificatePage"));
-const CenterDetailPage = lazy(() => import("../pages/CenterDetailPage"));
-const VerifyEmailPage = lazy(() => import("../pages/VerifyEmailPage"));
-const CookiePolicyPage = lazy(() => import("../pages/CookiePolicyPage"));
-const DisclaimerPage = lazy(() => import("../pages/DisclaimerPage"));
-const MyFeedbackPage = lazy(() => import("../pages/MyFeedbackPage"));
-const MyContactPage = lazy(() => import("../pages/MyContactPage"));
-const VerifyCertificatePage = lazy(() => import("../pages/VerifyCertificatePage"));
-
-function RouteLoader() {
-  return (
-    <div className="d-flex justify-content-center align-items-center" style={{ minHeight: "40vh" }}>
-      <div className="spinner-border text-primary" role="status">
-        <span className="visually-hidden">Loading...</span>
-      </div>
-    </div>
-  );
-}
+const HomePage = lazy(lazyWithRetry(() => import("../pages/HomePage"), "route-home"));
+const DrivesPage = lazy(lazyWithRetry(() => import("../pages/DrivesPage"), "route-drives"));
+const CentersPage = lazy(lazyWithRetry(() => import("../pages/CentersPage"), "route-centers"));
+const AboutPage = lazy(lazyWithRetry(() => import("../pages/AboutPage"), "route-about"));
+const ContactPage = lazy(lazyWithRetry(() => import("../pages/ContactPage"), "route-contact"));
+const LoginPage = lazy(lazyWithRetry(() => import("../pages/LoginPage"), "route-login"));
+const RegisterPage = lazy(lazyWithRetry(() => import("../pages/RegisterPage"), "route-register"));
+const ForgotPasswordPage = lazy(lazyWithRetry(() => import("../pages/ForgotPasswordPage"), "route-forgot-password"));
+const ResetPasswordPage = lazy(lazyWithRetry(() => import("../pages/ResetPasswordPage"), "route-reset-password"));
+const AdminDashboardPage = lazy(lazyWithRetry(() => import("../pages/AdminDashboardPage"), "route-admin-dashboard"));
+const AdminDriveSlotsPage = lazy(lazyWithRetry(() => import("../pages/AdminDriveSlotsPage"), "route-admin-drive-slots"));
+const UserBookingsPage = lazy(lazyWithRetry(() => import("../pages/UserBookingsPage"), "route-user-bookings"));
+const NotFoundPage = lazy(lazyWithRetry(() => import("../pages/NotFoundPage"), "route-not-found"));
+const PrivacyPolicyPage = lazy(lazyWithRetry(() => import("../pages/PrivacyPolicyPage"), "route-privacy"));
+const TermsConditionsPage = lazy(lazyWithRetry(() => import("../pages/TermsConditionsPage"), "route-terms"));
+const CopyrightPage = lazy(lazyWithRetry(() => import("../pages/CopyrightPage"), "route-copyright"));
+const ContactLegalPage = lazy(lazyWithRetry(() => import("../pages/ContactLegalPage"), "route-contact-legal"));
+const ProfilePage = lazy(lazyWithRetry(() => import("../pages/ProfilePage"), "route-profile"));
+const FeedbackPage = lazy(lazyWithRetry(() => import("../pages/FeedbackPage"), "route-feedback"));
+const NewsPage = lazy(lazyWithRetry(() => import("../pages/NewsPage"), "route-news"));
+const GuidePage = lazy(lazyWithRetry(() => import("../pages/GuidePage"), "route-guide"));
+const CertificatePage = lazy(lazyWithRetry(() => import("../pages/CertificatePage"), "route-certificates"));
+const CenterDetailPage = lazy(lazyWithRetry(() => import("../pages/CenterDetailPage"), "route-center-detail"));
+const VerifyEmailPage = lazy(lazyWithRetry(() => import("../pages/VerifyEmailPage"), "route-verify-email"));
+const CookiePolicyPage = lazy(lazyWithRetry(() => import("../pages/CookiePolicyPage"), "route-cookie-policy"));
+const DisclaimerPage = lazy(lazyWithRetry(() => import("../pages/DisclaimerPage"), "route-disclaimer"));
+const MyFeedbackPage = lazy(lazyWithRetry(() => import("../pages/MyFeedbackPage"), "route-my-feedback"));
+const MyContactPage = lazy(lazyWithRetry(() => import("../pages/MyContactPage"), "route-my-contact"));
+const VerifyCertificatePage = lazy(lazyWithRetry(() => import("../pages/VerifyCertificatePage"), "route-verify-certificate"));
 
 export default function AppRoutes() {
   return (
-    <Suspense fallback={<RouteLoader />}>
-      <Routes>
+    <ChunkErrorBoundary resetKey="app-routes" title="A page failed to load" message="Refresh the page or retry the route.">
+      <Suspense fallback={<AppLoadingFallback title="Loading secure route" description="Fetching the next VaxZone workspace." />}>
+        <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/drives" element={<DrivesPage />} />
         <Route path="/centers" element={<CentersPage />} />
@@ -255,7 +249,8 @@ export default function AppRoutes() {
         />
 
         <Route path="*" element={<NotFoundPage />} />
-      </Routes>
-    </Suspense>
+        </Routes>
+      </Suspense>
+    </ChunkErrorBoundary>
   );
 }

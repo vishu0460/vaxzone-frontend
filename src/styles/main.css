@@ -252,6 +252,22 @@ body {
   overflow-x: clip;
 }
 
+body,
+#root,
+.app-shell,
+.app-main {
+  width: 100%;
+  max-width: 100%;
+}
+
+:where(h1, h2, h3, h4, h5, h6, p, span, small, strong, label, a, button, .btn, .badge, .nav-link, .dropdown-item, th, td, code) {
+  overflow-wrap: anywhere;
+}
+
+:where(input, select, textarea, button, .btn, .form-control, .form-select, .input-group, .dropdown-menu, .table-responsive, .card, .modal-content, .app-modal-panel) {
+  max-width: 100%;
+}
+
 h1, h2, h3, h4, h5, h6 {
   letter-spacing: -0.03em;
 }
@@ -266,7 +282,10 @@ a:hover {
 }
 
 img,
-svg {
+svg,
+iframe,
+video,
+canvas {
   display: block;
   max-width: 100%;
 }
@@ -4527,6 +4546,7 @@ pre code {
 }
 
 .table-responsive {
+  width: 100%;
   border: 1px solid var(--border-color);
   border-radius: 1.1rem;
   overflow-x: auto;
@@ -4539,6 +4559,61 @@ pre code {
 .table-responsive .table {
   margin-bottom: 0;
   min-width: 100%;
+  width: max-content;
+}
+
+.table-responsive > .table,
+.table-responsive > table {
+  margin-bottom: 0;
+}
+
+.modal-dialog {
+  width: min(95vw, var(--bs-modal-width, 560px));
+  max-width: calc(100vw - 1rem);
+  margin: clamp(0.5rem, 2vw, 1.75rem) auto;
+}
+
+.modal-content {
+  max-height: min(90dvh, calc(100dvh - 1rem));
+  overflow: hidden;
+}
+
+.modal-body {
+  overflow: auto;
+}
+
+.modal-footer,
+.app-modal-footer,
+.card-footer {
+  flex-wrap: wrap;
+}
+
+.recharts-responsive-container,
+.recharts-wrapper,
+.dashboard-bar-chart-wrap,
+.dashboard-donut-chart,
+.dashboard-chart-card,
+.dashboard-panel-card {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.dashboard-chart-card .card-body,
+.dashboard-panel-card .card-body,
+.dashboard-bar-chart-wrap,
+.logs-table-card,
+.admin-certificates-panel,
+.certificate-page__hero,
+.certificate-sidecard,
+.certificate-list-card,
+.page-header,
+.hero-section {
+  min-width: 0;
+}
+
+.dashboard-chart-card .recharts-responsive-container,
+.dashboard-panel-card .recharts-responsive-container {
+  min-height: clamp(220px, 34vw, 320px);
 }
 
 .dashboard-loading {
@@ -5268,7 +5343,7 @@ pre code {
   }
 
   .app-modal-panel {
-    width: 90%;
+    width: min(95vw, 100%);
     border-radius: 1.15rem;
   }
 
@@ -5922,7 +5997,8 @@ pre code {
   }
 
   .logs-table__summary-cell {
-    min-width: 260px !important;
+    min-width: 0 !important;
+    max-width: 100%;
   }
 
   .drives-page__alert,
@@ -7940,6 +8016,77 @@ pre code {
 }
 
 @media (max-width: 767.98px) {
+  .container,
+  .container-fluid,
+  .admin-dashboard-shell {
+    padding-left: clamp(0.85rem, 3vw, 1rem);
+    padding-right: clamp(0.85rem, 3vw, 1rem);
+  }
+
+  .card-body,
+  .card-header,
+  .card-footer {
+    padding: 1rem;
+  }
+
+  .modal-dialog {
+    max-width: calc(100vw - 0.75rem);
+    margin: 0.375rem auto;
+  }
+
+  .modal-content {
+    max-height: min(92dvh, calc(100dvh - 0.75rem));
+    border-radius: 1rem !important;
+  }
+
+  .modal-header,
+  .modal-body,
+  .modal-footer {
+    padding: 1rem;
+  }
+
+  .modal-footer,
+  .app-modal-footer {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .modal-footer .btn,
+  .modal-footer .btn-group,
+  .app-modal-footer > *,
+  .app-modal-footer .btn {
+    width: 100%;
+  }
+
+  .table-responsive {
+    border-radius: 1rem;
+  }
+
+  .table-responsive .table {
+    font-size: 0.92rem;
+  }
+
+  .notification-item > .d-flex,
+  .notification-item .d-flex.justify-content-between,
+  .certificate-page__hero .d-flex,
+  .certificate-sidecard__actions,
+  .logs-toolbar-actions {
+    flex-direction: column;
+    align-items: stretch !important;
+  }
+
+  .certificate-page__hero-actions,
+  .certificate-sidecard__actions {
+    width: 100%;
+  }
+
+  .certificate-page__hero-actions .btn,
+  .certificate-sidecard__actions .btn,
+  .notification-item .btn,
+  .logs-toolbar-actions .btn {
+    width: 100%;
+  }
+
   .hero-section .btn-lg,
   .certificate-page__hero-actions .btn,
   .drives-page__toolbar .btn,
@@ -7997,6 +8144,7 @@ pre code {
 
   .logs-table__summary-cell {
     min-width: 0 !important;
+    max-width: 100%;
   }
 }
 
@@ -8100,6 +8248,115 @@ pre code {
   .nearby-card,
   .empty-state {
     padding: 1.2rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .app-main {
+    padding-top: calc(var(--nav-height) - 6px);
+  }
+
+  .app-navbar__inner {
+    padding: 0.68rem 0.72rem;
+  }
+
+  .app-brand {
+    gap: 0.55rem;
+    margin-right: 0.4rem;
+  }
+
+  .app-brand-text {
+    font-size: 1.05rem;
+  }
+
+  .theme-toggle {
+    min-height: 42px;
+    padding-inline: 0.55rem;
+  }
+
+  .theme-toggle-label {
+    display: none;
+  }
+
+  .nav-icon-button {
+    width: 42px;
+    height: 42px;
+  }
+
+  .page-header,
+  .hero-section {
+    overflow: clip;
+  }
+
+  .page-header,
+  .page-header .card,
+  .certificate-page__hero,
+  .certificate-sidecard,
+  .certificate-list-card,
+  .dashboard-summary-card,
+  .dashboard-chart-card,
+  .dashboard-panel-card,
+  .admin-nav-shell,
+  .admin-nav-section {
+    border-radius: 1rem !important;
+  }
+
+  .table-responsive .table {
+    font-size: 0.88rem;
+  }
+
+  .notification-modal-body {
+    max-height: min(68dvh, 70vh);
+  }
+
+  .notification-item {
+    padding: 0.9rem !important;
+  }
+
+  .certificate-preview__frame,
+  .certificate-sidecard .card-body,
+  .admin-management__header,
+  .admin-certificates-panel__header {
+    padding: 1rem !important;
+  }
+}
+
+@media (max-width: 360px) {
+  .container,
+  .container-fluid,
+  .admin-dashboard-shell,
+  .site-footer__container {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+
+  .app-navbar .navbar-collapse {
+    padding: 0.75rem;
+  }
+
+  .hero-section h1 {
+    font-size: clamp(1.95rem, 10vw, 2.45rem);
+  }
+
+  .page-header {
+    padding: 2rem 0 1.5rem;
+  }
+
+  .card-body,
+  .card-header,
+  .card-footer,
+  .modal-header,
+  .modal-body,
+  .modal-footer {
+    padding: 0.9rem;
+  }
+
+  .table-responsive {
+    border-radius: 0.9rem;
+  }
+
+  .table-responsive .table {
+    font-size: 0.84rem;
   }
 }
 

@@ -1,22 +1,14 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { Suspense, lazy, useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Container, Row, Col, Card, Table, Badge, Button, Spinner, Form, Alert } from 'react-bootstrap';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, ArcElement } from 'chart.js';
-import { Bar } from 'react-chartjs-2';
-import { jsPDF } from 'jspdf';
 import { adminAPI, getErrorMessage, newsAPI, superAdminAPI, unwrapApiData } from '../api/client';
-import SystemOverviewChart from '../components/admin/SystemOverviewChart';
-import BookingStatusChart from '../components/admin/BookingStatusChart';
+import AppLoadingFallback from '../components/AppLoadingFallback';
 import ActivityTimeline from '../components/admin/ActivityTimeline';
-import LogsTable from '../components/admin/LogsTable';
 import ErrorState from '../components/ErrorState';
 import Modal from '../components/ui/Modal';
 import ConfirmModal from '../components/ui/ConfirmModal';
 import Skeleton, { SkeletonCard, SkeletonTable } from '../components/Skeleton';
 import SearchInput from '../components/SearchInput';
-import AdminManagement from '../components/admin/AdminManagement';
-import AdminCertificatesPanel from '../components/admin/AdminCertificatesPanel';
-import SmartImportPanel from '../components/admin/SmartImportPanel';
 import useCurrentTime from '../hooks/useCurrentTime';
 import { getRole } from '../utils/auth';
 import { ADMIN_DRIVE_ACTION_TYPES, getAdminDriveSlotsPath } from '../utils/adminDriveActions';
@@ -26,8 +18,15 @@ import { broadcastDataUpdated, debugDataSync, subscribeToDataUpdates } from '../
 import { FaUsers, FaCalendarCheck, FaSyringe, FaHospital, FaNewspaper, FaCertificate, FaPlus, FaTrash, FaEdit, FaCheck, FaTimes, FaChartLine, FaBell, FaUserShield, FaComment, FaPhone, FaClipboardList, FaDownload, FaHistory, FaShieldAlt, FaSyncAlt, FaCog } from 'react-icons/fa';
 import { calculateAgeFromDob } from '../utils/authValidation';
 import { DEFAULT_VISIBLE_COUNT, getDisplayedItems, matchesSmartSearch, normalizeListSearch, shouldShowViewMore } from '../utils/listSearch';
+import { lazyWithRetry } from '../utils/lazyWithRetry';
 
-ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, ArcElement);
+const SystemOverviewChart = lazy(lazyWithRetry(() => import('../components/admin/SystemOverviewChart'), 'admin-system-overview-chart'));
+const BookingStatusChart = lazy(lazyWithRetry(() => import('../components/admin/BookingStatusChart'), 'admin-booking-status-chart'));
+const DashboardBarChart = lazy(lazyWithRetry(() => import('../components/admin/DashboardBarChart'), 'admin-bar-chart'));
+const LogsTable = lazy(lazyWithRetry(() => import('../components/admin/LogsTable'), 'admin-logs-table'));
+const AdminManagement = lazy(lazyWithRetry(() => import('../components/admin/AdminManagement'), 'admin-management'));
+const AdminCertificatesPanel = lazy(lazyWithRetry(() => import('../components/admin/AdminCertificatesPanel'), 'admin-certificates-panel'));
+const SmartImportPanel = lazy(lazyWithRetry(() => import('../components/admin/SmartImportPanel'), 'admin-smart-import-panel'));
 
 const EMPTY_STATS = {
   totalUsers: 0,
@@ -609,6 +608,13 @@ const LOG_VIEW_OPTIONS = [
 ];
 
 const LOG_ACTION_OPTIONS = ['CREATE', 'UPDATE', 'DELETE', 'LOGIN', 'LOGOUT', 'ERROR', 'INFO'];
+const lazyAdminSectionFallback = (
+  <AppLoadingFallback
+    variant="section"
+    title="Loading admin tools"
+    description="Preparing dashboard modules and management workflows."
+  />
+);
 
 const TAB_ROUTE_MAP = {
   dashboard: '/admin/dashboard',
@@ -2713,8 +2719,10 @@ export default function AdminDashboardPage() {
   }, [activeTab, isSuperAdmin, tabs]);
 
   useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
     const pathname = location.pathname.replace(/\/+$/, '') || '/admin/dashboard';
-    const routeTab = ROUTE_TAB_MAP[pathname] || 'dashboard';
+    const requestedSection = searchParams.get('section');
+    const routeTab = requestedSection || ROUTE_TAB_MAP[pathname] || 'dashboard';
     const isAllowedTab = tabs.some((tab) => tab.id === routeTab);
     let resolvedTab = routeTab;
     if (!isAllowedTab) {
@@ -2734,7 +2742,7 @@ export default function AdminDashboardPage() {
       requestRefresh();
       return resolvedTab;
     });
-  }, [isSuperAdmin, location.pathname, navigate, requestRefresh, tabs]);
+  }, [isSuperAdmin, location.pathname, location.search, navigate, requestRefresh, tabs]);
 
   // Load functions for Feedback and Contacts
   const loadFeedbacks = async (options = {}) => {
@@ -2880,6 +2888,8 @@ export default function AdminDashboardPage() {
     const searchParams = new URLSearchParams(location.search);
     const openAction = searchParams.get('open');
     const requestedContactId = Number(searchParams.get('contactId'));
+    const requestedFeedbackId = Number(searchParams.get('feedbackId'));
+    const requestedBookingId = Number(searchParams.get('bookingId'));
 
     if (!openAction) {
       return;
@@ -2937,6 +2947,56 @@ export default function AdminDashboardPage() {
             openContactModal(matchedContact);
           } else {
             infoToast('No contact requests are available right now.');
+          }
+
+          clearPendingAction();
+          return;
+        }
+
+        if (openAction === 'reply-feedback') {
+          const response = await adminAPI.getAllFeedback(0, 500);
+          const nextFeedbacks = ensureArray(unwrapApiData(response));
+
+          if (cancelled) {
+            return;
+          }
+
+          setFeedbacks(nextFeedbacks);
+          const matchedFeedback = (Number.isFinite(requestedFeedbackId) && requestedFeedbackId > 0
+            ? nextFeedbacks.find((feedback) => Number(feedback.id) === requestedFeedbackId)
+            : null)
+            || nextFeedbacks.find((feedback) => String(feedback.status || '').toUpperCase() !== 'REPLIED')
+            || nextFeedbacks[0];
+
+          if (matchedFeedback) {
+            openFeedbackModal(matchedFeedback);
+          } else {
+            infoToast('No feedback items are available right now.');
+          }
+
+          clearPendingAction();
+          return;
+        }
+
+        if (openAction === 'edit-booking') {
+          const response = await adminAPI.getAllBookings();
+          const nextBookings = ensureArray(unwrapApiData(response));
+
+          if (cancelled) {
+            return;
+          }
+
+          setBookings(nextBookings);
+          const matchedBooking = (Number.isFinite(requestedBookingId) && requestedBookingId > 0
+            ? nextBookings.find((booking) => Number(booking.id) === requestedBookingId)
+            : null)
+            || nextBookings[0];
+
+          if (matchedBooking) {
+            setSelectedBooking(matchedBooking);
+            setShowEditBookingModal(true);
+          } else {
+            infoToast('No bookings are available right now.');
           }
 
           clearPendingAction();
@@ -3189,7 +3249,9 @@ export default function AdminDashboardPage() {
               {loading ? (
                 <Skeleton height={320} borderRadius="16px" />
               ) : (
-                <SystemOverviewChart data={dashboardChartData} onItemClick={handleSystemOverviewChartClick} />
+                <Suspense fallback={<Skeleton height={320} borderRadius="16px" />}>
+                  <SystemOverviewChart data={dashboardChartData} onItemClick={handleSystemOverviewChartClick} />
+                </Suspense>
               )}
             </Card.Body>
           </Card>
@@ -3205,7 +3267,9 @@ export default function AdminDashboardPage() {
               {loading ? (
                 <Skeleton height={320} borderRadius="16px" />
               ) : (
-                <BookingStatusChart data={bookingsByStatus} onItemClick={handleBookingStatusChartClick} />
+                <Suspense fallback={<Skeleton height={320} borderRadius="16px" />}>
+                  <BookingStatusChart data={bookingsByStatus} onItemClick={handleBookingStatusChartClick} />
+                </Suspense>
               )}
             </Card.Body>
           </Card>
@@ -3293,14 +3357,16 @@ export default function AdminDashboardPage() {
             </Card.Header>
             <Card.Body>
               <p className="small text-muted mb-3">Click a status to open filtered vaccination drives.</p>
-              <BookingStatusChart
-                data={driveStatusChartData}
-                onItemClick={handleDriveStatusChartClick}
-                height={300}
-                centerLabel="Drives"
-                innerRadius={54}
-                outerRadius={88}
-              />
+              <Suspense fallback={<Skeleton height={300} borderRadius="16px" />}>
+                <BookingStatusChart
+                  data={driveStatusChartData}
+                  onItemClick={handleDriveStatusChartClick}
+                  height={300}
+                  centerLabel="Drives"
+                  innerRadius={54}
+                  outerRadius={88}
+                />
+              </Suspense>
             </Card.Body>
           </Card>
         </Col>
@@ -3326,10 +3392,12 @@ export default function AdminDashboardPage() {
                   }
                 }}
               >
-                <Bar
-                  data={dailyBookingsChartData}
-                  options={{ responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, onHover: (event) => { if (event?.native?.target) event.native.target.style.cursor = 'pointer'; } }}
-                />
+                <Suspense fallback={<Skeleton height={260} borderRadius="16px" />}>
+                  <DashboardBarChart
+                    data={dailyBookingsChartData}
+                    options={{ responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, onHover: (event) => { if (event?.native?.target) event.native.target.style.cursor = 'pointer'; } }}
+                  />
+                </Suspense>
               </button>
             </Card.Body>
           </Card>
@@ -3353,10 +3421,12 @@ export default function AdminDashboardPage() {
                   }
                 }}
               >
-                <Bar
-                  data={slotUsageChartData}
-                  options={{ responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, onHover: (event) => { if (event?.native?.target) event.native.target.style.cursor = 'pointer'; } }}
-                />
+                <Suspense fallback={<Skeleton height={260} borderRadius="16px" />}>
+                  <DashboardBarChart
+                    data={slotUsageChartData}
+                    options={{ responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, onHover: (event) => { if (event?.native?.target) event.native.target.style.cursor = 'pointer'; } }}
+                  />
+                </Suspense>
               </button>
             </Card.Body>
           </Card>
@@ -4294,12 +4364,13 @@ export default function AdminDashboardPage() {
       successToast('Logs exported as CSV.');
     };
 
-    const handleExportPdf = () => {
+    const handleExportPdf = async () => {
       if (exportRows.length === 0) {
         infoToast('There are no logs to export yet.');
         return;
       }
 
+      const { jsPDF } = await import('jspdf');
       const doc = new jsPDF({ unit: 'pt', format: 'a4' });
       const title = getLogsViewTitle(logsView);
       let yPosition = 42;
@@ -4436,14 +4507,16 @@ export default function AdminDashboardPage() {
               emptyMessage="No activity matched the current filters."
             />
           ) : (
-            <LogsTable
-              entries={currentEntries}
-              loading={currentLoading}
-              mode={logsView === 'security' ? 'security' : 'system'}
-              hasMore={currentHasMore}
-              onLoadMore={handleLoadMoreLogs}
-              emptyMessage={logsView === 'security' ? 'No security events matched the current filters.' : 'No logs found for the selected filters.'}
-            />
+            <Suspense fallback={<SkeletonTable rows={6} columns={5} />}>
+              <LogsTable
+                entries={currentEntries}
+                loading={currentLoading}
+                mode={logsView === 'security' ? 'security' : 'system'}
+                hasMore={currentHasMore}
+                onLoadMore={handleLoadMoreLogs}
+                emptyMessage={logsView === 'security' ? 'No security events matched the current filters.' : 'No logs found for the selected filters.'}
+              />
+            </Suspense>
           )}
 
           {currentLoading && currentEntries.length > 0 ? (
@@ -4602,7 +4675,11 @@ export default function AdminDashboardPage() {
           )}
           {activeTab === 'users' && isSuperAdmin && renderUsers()}
           {activeTab === 'bookings' && renderBookings()}
-          {activeTab === 'certificates' && <AdminCertificatesPanel />}
+          {activeTab === 'certificates' && (
+            <Suspense fallback={lazyAdminSectionFallback}>
+              <AdminCertificatesPanel />
+            </Suspense>
+          )}
           {activeTab === 'slots' && renderSlots()}
           {activeTab === 'centers' && renderCenters()}
           {activeTab === 'drives' && renderDrives()}
@@ -4610,7 +4687,11 @@ export default function AdminDashboardPage() {
           {activeTab === 'feedback' && renderFeedback()}
           {activeTab === 'contacts' && renderContacts()}
           {activeTab === 'logs' && renderLogs()}
-          {activeTab === 'admins' && isSuperAdmin && <AdminManagement onDataChanged={requestRefresh} />}
+          {activeTab === 'admins' && isSuperAdmin && (
+            <Suspense fallback={lazyAdminSectionFallback}>
+              <AdminManagement onDataChanged={requestRefresh} />
+            </Suspense>
+          )}
         </div>
       </Container>
 
@@ -4621,14 +4702,16 @@ export default function AdminDashboardPage() {
         </Modal.Header>
         <Form onSubmit={handleCreateNews}>
           <Modal.Body>
-            <SmartImportPanel
-              type="news"
-              textValue={importText.news}
-              onTextChange={(value) => updateImportTextValue('news', value)}
-              onApply={applyAutoFillToForm('news', setNewsForm)}
-              onClear={() => clearImportPanel('news')}
-              onImportComplete={(payload) => handleImportComplete('news', payload)}
-            />
+            <Suspense fallback={lazyAdminSectionFallback}>
+              <SmartImportPanel
+                type="news"
+                textValue={importText.news}
+                onTextChange={(value) => updateImportTextValue('news', value)}
+                onApply={applyAutoFillToForm('news', setNewsForm)}
+                onClear={() => clearImportPanel('news')}
+                onImportComplete={(payload) => handleImportComplete('news', payload)}
+              />
+            </Suspense>
             <Form.Group className="mb-3">
               <Form.Label>Title</Form.Label>
               <Form.Control type="text" value={newsForm.title} onChange={e => setNewsForm({...newsForm, title: e.target.value})} required placeholder="Enter news title" style={getAutoFillFieldStyle(isAutoFilledField('news', 'title'))} />
@@ -4694,14 +4777,16 @@ export default function AdminDashboardPage() {
         </Modal.Header>
         <Form onSubmit={handleCreateCenter}>
           <Modal.Body>
-            <SmartImportPanel
-              type="center"
-              textValue={importText.center}
-              onTextChange={(value) => updateImportTextValue('center', value)}
-              onApply={applyAutoFillToForm('center', setCenterForm)}
-              onClear={() => clearImportPanel('center')}
-              onImportComplete={(payload) => handleImportComplete('center', payload)}
-            />
+            <Suspense fallback={lazyAdminSectionFallback}>
+              <SmartImportPanel
+                type="center"
+                textValue={importText.center}
+                onTextChange={(value) => updateImportTextValue('center', value)}
+                onApply={applyAutoFillToForm('center', setCenterForm)}
+                onClear={() => clearImportPanel('center')}
+                onImportComplete={(payload) => handleImportComplete('center', payload)}
+              />
+            </Suspense>
             <Row>
               <Col md={6}>
                 <Form.Group className="mb-3">
@@ -4843,15 +4928,17 @@ export default function AdminDashboardPage() {
         </Modal.Header>
         <Form onSubmit={handleCreateDrive}>
           <Modal.Body>
-            <SmartImportPanel
-              type="drive"
-              textValue={importText.drive}
-              onTextChange={(value) => updateImportTextValue('drive', value)}
-              onApply={applyAutoFillToForm('drive', setDriveForm)}
-              onClear={() => clearImportPanel('drive')}
-              onImportComplete={(payload) => handleImportComplete('drive', payload)}
-              context={{ centers }}
-            />
+            <Suspense fallback={lazyAdminSectionFallback}>
+              <SmartImportPanel
+                type="drive"
+                textValue={importText.drive}
+                onTextChange={(value) => updateImportTextValue('drive', value)}
+                onApply={applyAutoFillToForm('drive', setDriveForm)}
+                onClear={() => clearImportPanel('drive')}
+                onImportComplete={(payload) => handleImportComplete('drive', payload)}
+                context={{ centers }}
+              />
+            </Suspense>
             <Form.Group className="mb-3">
               <Form.Label>Drive Title</Form.Label>
               <Form.Control type="text" value={driveForm.title} onChange={e => setDriveForm({...driveForm, title: e.target.value})} required placeholder="e.g., COVID-19 Booster Drive" style={getAutoFillFieldStyle(isAutoFilledField('drive', 'title'))} />
@@ -5089,15 +5176,17 @@ export default function AdminDashboardPage() {
         </Modal.Header>
         <Form onSubmit={handleCreateSlot}>
           <Modal.Body>
-            <SmartImportPanel
-              type="slot"
-              textValue={importText.slot}
-              onTextChange={(value) => updateImportTextValue('slot', value)}
-              onApply={applyAutoFillToForm('slot', setSlotForm)}
-              onClear={() => clearImportPanel('slot')}
-              onImportComplete={(payload) => handleImportComplete('slot', payload)}
-              context={{ drives }}
-            />
+            <Suspense fallback={lazyAdminSectionFallback}>
+              <SmartImportPanel
+                type="slot"
+                textValue={importText.slot}
+                onTextChange={(value) => updateImportTextValue('slot', value)}
+                onApply={applyAutoFillToForm('slot', setSlotForm)}
+                onClear={() => clearImportPanel('slot')}
+                onImportComplete={(payload) => handleImportComplete('slot', payload)}
+                context={{ drives }}
+              />
+            </Suspense>
             <Alert variant="info" style={{background: 'linear-gradient(135deg, #cffafe 0%, #06b6d4 100%)', border: 'none', borderRadius: '0.5rem'}}>
               <small>{selectedDrive?.title ? <>Creating slot for drive: <strong>{selectedDrive.title}</strong></> : 'Choose a drive, date/time, and capacity to create a slot.'}</small>
             </Alert>

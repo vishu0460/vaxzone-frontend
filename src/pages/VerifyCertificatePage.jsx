@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import QRCode from "qrcode";
 import { certificateAPI, unwrapApiData } from "../api/client";
 import ModalPopup from "../components/ModalPopup";
 import SearchInput from "../components/SearchInput";
@@ -39,6 +38,7 @@ export default function VerifyCertificatePage() {
 
   const generateQRCode = async (cert) => {
     try {
+      const { default: QRCode } = await import("qrcode");
       return await QRCode.toDataURL(getVerificationUrl(cert), {
         width: 150,
         margin: 2

@@ -1,10 +1,7 @@
-import React, { useEffect, useRef, useState } from "react";
-import html2canvas from "html2canvas";
-import { jsPDF } from "jspdf";
-import QRCode from "qrcode";
+import React, { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { FaCertificate, FaDownload, FaEye, FaPrint, FaSearch } from "react-icons/fa";
 import { adminAPI, certificateAPI, getErrorMessage, unwrapApiData } from "../../api/client";
-import CertificatePreview from "../CertificatePreview";
+import AppLoadingFallback from "../AppLoadingFallback";
 import EmptyState from "../EmptyState";
 import Skeleton, { SkeletonTable } from "../Skeleton";
 import Modal from "../ui/Modal";
@@ -17,9 +14,12 @@ import {
   getVerificationPath,
   getVerificationUrl
 } from "../../utils/certificateDocument";
+import { lazyWithRetry } from "../../utils/lazyWithRetry";
 
 const EXPORT_WIDTH = 1400;
 const EXPORT_SCALE = 2;
+const loadCertificatePreview = () => import("../CertificatePreview");
+const CertificatePreview = lazy(lazyWithRetry(loadCertificatePreview, "admin-certificate-preview"));
 
 export default function AdminCertificatesPanel() {
   const [certificates, setCertificates] = useState([]);
@@ -109,6 +109,7 @@ export default function AdminCertificatesPanel() {
   }, [selectedCertificate]);
 
   const generateQRCode = async (certificate) =>
+    import("qrcode").then(({ default: QRCode }) =>
     QRCode.toDataURL(getVerificationUrl(certificate), {
       width: 280,
       margin: 1,
@@ -116,7 +117,7 @@ export default function AdminCertificatesPanel() {
         dark: CERTIFICATE_THEME.navy,
         light: getComputedStyle(document.documentElement).getPropertyValue("--surface-color").trim() || "#ffffff"
       }
-    });
+    }));
 
   const waitForPreviewAssets = async (element) => {
     if (!element) {
@@ -149,6 +150,7 @@ export default function AdminCertificatesPanel() {
     }
 
     await waitForPreviewAssets(node);
+    const { default: html2canvas } = await import("html2canvas");
 
     return html2canvas(node, {
       backgroundColor: getComputedStyle(document.documentElement).getPropertyValue("--certificate-export-bg").trim() || "#f4f7fa",
@@ -178,6 +180,7 @@ export default function AdminCertificatesPanel() {
 
     try {
       setActionLoading(`${format}-${certificate.id}`);
+      await loadCertificatePreview();
       if (selectedCertificate?.id !== certificate.id) {
         setSelectedCertificate(certificate);
         await new Promise((resolve) => window.requestAnimationFrame(() => window.requestAnimationFrame(resolve)));
@@ -198,6 +201,7 @@ export default function AdminCertificatesPanel() {
         return;
       }
 
+      const { jsPDF } = await import("jspdf");
       const doc = new jsPDF({
         orientation: canvas.width >= canvas.height ? "landscape" : "portrait",
         unit: "px",
@@ -370,12 +374,14 @@ export default function AdminCertificatesPanel() {
 
       {selectedCertificate ? (
         <div className="certificate-export-stage" aria-hidden="true">
-          <CertificatePreview
-            ref={exportPreviewRef}
-            certificate={selectedCertificate}
-            qrCodeUrl={selectedQrCodeUrl}
-            exportMode
-          />
+          <Suspense fallback={<AppLoadingFallback variant="section" title="Preparing admin certificate export" description="Loading preview assets for download." />}>
+            <CertificatePreview
+              ref={exportPreviewRef}
+              certificate={selectedCertificate}
+              qrCodeUrl={selectedQrCodeUrl}
+              exportMode
+            />
+          </Suspense>
         </div>
       ) : null}
 
@@ -412,7 +418,11 @@ export default function AdminCertificatesPanel() {
                   </button>
                 </div>
               </div>
-              {!selectedQrCodeUrl ? <Skeleton height={480} /> : <CertificatePreview certificate={selectedCertificate} qrCodeUrl={selectedQrCodeUrl} />}
+              {!selectedQrCodeUrl ? <Skeleton height={480} /> : (
+                <Suspense fallback={<Skeleton height={480} />}>
+                  <CertificatePreview certificate={selectedCertificate} qrCodeUrl={selectedQrCodeUrl} />
+                </Suspense>
+              )}
             </>
           ) : null}
         </Modal.Body>

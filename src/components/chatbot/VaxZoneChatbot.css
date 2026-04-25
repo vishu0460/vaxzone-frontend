@@ -1,13 +1,25 @@
+.vaxzone-chatbot,
+.vaxzone-chatbot *,
+.vaxzone-chatbot *::before,
+.vaxzone-chatbot *::after {
+  box-sizing: border-box;
+}
+
 .vaxzone-chatbot {
+  --vaxzone-chatbot-side-gap: 16px;
+  --vaxzone-chatbot-bottom-gap: 16px;
+  --vaxzone-chatbot-panel-width: clamp(390px, 28vw, 430px);
+  --vaxzone-chatbot-panel-height: min(650px, calc(var(--vaxzone-chatbot-vh, 100dvh) - 104px));
   position: fixed;
-  right: 1rem;
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 1rem);
+  right: var(--vaxzone-chatbot-side-gap);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + var(--vaxzone-chatbot-bottom-gap));
   z-index: 1090;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   gap: 0.85rem;
   pointer-events: none;
+  max-width: calc(100vw - (var(--vaxzone-chatbot-side-gap) * 2));
 }
 
 .vaxzone-chatbot > * {
@@ -15,11 +27,12 @@
 }
 
 .vaxzone-chatbot__panel {
-  width: min(410px, calc(100vw - 1.5rem));
-  height: min(680px, 75vh);
-  max-height: 680px;
-  display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
+  width: var(--vaxzone-chatbot-panel-width);
+  max-width: calc(100vw - (var(--vaxzone-chatbot-side-gap) * 2));
+  height: var(--vaxzone-chatbot-panel-height);
+  max-height: 650px;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--border-color) 92%, transparent);
   border-radius: 1.4rem;
@@ -36,6 +49,7 @@
     transform 220ms ease,
     visibility 220ms ease,
     box-shadow 180ms ease;
+  overscroll-behavior: contain;
 }
 
 .vaxzone-chatbot__panel.is-open {
@@ -44,11 +58,32 @@
   transform: translateY(0) scale(1);
 }
 
-.vaxzone-chatbot__panel.is-chat-mode {
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
+.vaxzone-chatbot__panel.is-copilot {
+  --vaxzone-chatbot-panel-width: min(1100px, calc(100vw - 48px));
+}
+
+.vaxzone-chatbot__panel.is-focus-mode {
+  --vaxzone-chatbot-panel-width: min(980px, calc(100vw - 80px));
+  height: min(760px, calc(var(--vaxzone-chatbot-vh, 100dvh) - 48px));
+}
+
+.vaxzone-chatbot__panel.is-compact .vaxzone-chatbot__card,
+.vaxzone-chatbot__panel.is-compact .vaxzone-chatbot__bubble {
+  padding: 0.72rem;
+}
+
+.vaxzone-chatbot__panel.is-compact .vaxzone-chatbot__welcome {
+  gap: 0.55rem;
+}
+
+.vaxzone-chatbot__chat-header,
+.vaxzone-chatbot__composer {
+  flex: 0 0 auto;
 }
 
 .vaxzone-chatbot__chat-header {
+  position: relative;
+  z-index: 2;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -95,18 +130,24 @@
   align-items: center;
   gap: 0.45rem;
   min-width: 0;
+  flex-wrap: wrap;
 }
 
 .vaxzone-chatbot__chat-title-row h2 {
   margin: 0;
+  min-width: 0;
   font-size: 0.96rem;
   font-weight: 800;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .vaxzone-chatbot__chat-header-copy p {
   margin: 0.1rem 0 0;
   color: var(--text-soft);
   font-size: 0.74rem;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .vaxzone-chatbot__built-in-badge {
@@ -124,16 +165,19 @@
   white-space: nowrap;
 }
 
-.vaxzone-chatbot__chat-header-actions {
+.vaxzone-chatbot__chat-header-actions,
+.vaxzone-chatbot__welcome-topline-actions {
   position: relative;
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
+  flex: 0 0 auto;
 }
 
-.vaxzone-chatbot__header-button {
-  width: 32px;
-  height: 32px;
+.vaxzone-chatbot__header-button,
+.vaxzone-chatbot__tool-button {
+  width: 40px;
+  height: 40px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -141,9 +185,12 @@
   border-radius: 999px;
   background: color-mix(in srgb, var(--surface-color) 96%, transparent);
   color: var(--text-soft);
+  touch-action: manipulation;
 }
 
-.vaxzone-chatbot__header-button:hover {
+.vaxzone-chatbot__header-button:hover,
+.vaxzone-chatbot__tool-button:hover,
+.vaxzone-chatbot__tool-button.is-active {
   background: color-mix(in srgb, var(--primary-soft) 72%, transparent);
   color: var(--primary-color);
 }
@@ -151,8 +198,8 @@
 .vaxzone-chatbot__menu {
   position: absolute;
   top: calc(100% + 0.35rem);
-  right: 2.5rem;
-  min-width: 148px;
+  right: 5.1rem;
+  min-width: 156px;
   display: grid;
   gap: 0.15rem;
   padding: 0.35rem;
@@ -164,6 +211,7 @@
 
 .vaxzone-chatbot__menu button {
   width: 100%;
+  min-height: 44px;
   padding: 0.6rem 0.7rem;
   border: none;
   border-radius: 0.7rem;
@@ -179,7 +227,75 @@
   color: var(--primary-color);
 }
 
+.vaxzone-chatbot__card-icon {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--primary-soft) 72%, transparent);
+  color: var(--primary-color);
+  margin-bottom: 0.35rem;
+}
+
+.vaxzone-chatbot__card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0.25rem 0 0.55rem;
+}
+
+.vaxzone-chatbot__card-tag {
+  padding: 0.18rem 0.5rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--secondary-color) 12%, transparent);
+  color: var(--text-soft);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.vaxzone-chatbot__timeline {
+  display: grid;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+}
+
+.vaxzone-chatbot__timeline-item {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  color: var(--text-soft);
+  font-size: 0.78rem;
+}
+
+.vaxzone-chatbot__timeline-item.is-active {
+  color: var(--primary-color);
+}
+
+.vaxzone-chatbot__timeline-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.vaxzone-chatbot__loading-label {
+  display: block;
+  width: 100%;
+  margin-bottom: 0.45rem;
+  color: var(--text-soft);
+  font-size: 0.74rem;
+}
+
+.vaxzone-chatbot button:focus-visible,
+.vaxzone-chatbot input:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--primary-color) 55%, white);
+  outline-offset: 2px;
+}
+
 .vaxzone-chatbot__header-line {
+  flex: 0 0 auto;
   height: 1px;
   background: linear-gradient(
     90deg,
@@ -190,22 +306,124 @@
   );
 }
 
+.vaxzone-chatbot__workspace {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.vaxzone-chatbot__copilot-panel {
+  width: min(340px, 34%);
+  border-left: 1px solid color-mix(in srgb, var(--border-color) 92%, transparent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--surface-color) 98%, transparent), color-mix(in srgb, var(--bg-color) 82%, transparent));
+  overflow-y: auto;
+  padding: 0.85rem;
+}
+
+.vaxzone-chatbot__copilot-section {
+  display: grid;
+  gap: 0.55rem;
+  margin-bottom: 1rem;
+}
+
+.vaxzone-chatbot__copilot-section h3 {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.vaxzone-chatbot__widgets,
+.vaxzone-chatbot__widget-actions {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.vaxzone-chatbot__widget {
+  padding: 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--border-color) 92%, transparent);
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--surface-color) 96%, transparent);
+}
+
+.vaxzone-chatbot__widget-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+.vaxzone-chatbot__widget-topline span {
+  font-size: 0.7rem;
+  color: var(--text-soft);
+}
+
+.vaxzone-chatbot__widget-copy {
+  margin: 0;
+  font-size: 0.77rem;
+  color: var(--text-soft);
+}
+
+.vaxzone-chatbot__widget-bars {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.55rem;
+}
+
+.vaxzone-chatbot__widget-bar-row {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.vaxzone-chatbot__widget-bar-row span {
+  font-size: 0.72rem;
+  color: var(--text-soft);
+}
+
+.vaxzone-chatbot__widget-bar-track {
+  height: 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--border-color) 72%, transparent);
+  overflow: hidden;
+}
+
+.vaxzone-chatbot__widget-bar-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
+}
+
+.vaxzone-chatbot__widget-actions button {
+  min-height: 38px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 92%, transparent);
+  border-radius: 0.8rem;
+  background: color-mix(in srgb, var(--surface-color) 98%, transparent);
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-align: left;
+  padding: 0.55rem 0.7rem;
+}
+
 .vaxzone-chatbot__welcome {
+  flex: 1 1 auto;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 0.75rem;
+  gap: 0.72rem;
   padding: 1rem;
-  background:
-    radial-gradient(circle at top left, color-mix(in srgb, var(--primary-soft) 68%, transparent), transparent 42%),
-    linear-gradient(180deg, color-mix(in srgb, var(--surface-color) 98%, transparent), color-mix(in srgb, var(--bg-color) 74%, transparent));
   overflow-y: auto;
+  overflow-x: hidden;
+  background:
+    radial-gradient(circle at top left, color-mix(in srgb, var(--primary-soft) 58%, transparent), transparent 40%),
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-color) 98%, transparent), color-mix(in srgb, var(--bg-color) 74%, transparent));
 }
 
 .vaxzone-chatbot__welcome-topline {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 0.75rem;
 }
 
 .vaxzone-chatbot__welcome-mark {
@@ -224,58 +442,80 @@
   margin: 0;
   font-size: 1.08rem;
   font-weight: 800;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .vaxzone-chatbot__welcome-title {
   margin: 0;
-  font-size: 1.25rem;
+  font-size: 1.18rem;
   font-weight: 800;
-  line-height: 1.2;
+  line-height: 1.22;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .vaxzone-chatbot__welcome-copy {
   margin: 0;
   color: var(--text-soft);
-  font-size: 0.9rem;
-  line-height: 1.5;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .vaxzone-chatbot__welcome-role {
   display: inline-flex;
   width: fit-content;
-  padding: 0.32rem 0.58rem;
+  max-width: 100%;
+  padding: 0.36rem 0.62rem;
   border-radius: 999px;
   background: color-mix(in srgb, var(--secondary-color) 10%, transparent);
   color: var(--secondary-strong);
   font-size: 0.72rem;
   font-weight: 800;
+  line-height: 1.35;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .vaxzone-chatbot__welcome-actions,
-.vaxzone-chatbot__chip-row {
+.vaxzone-chatbot__chip-row,
+.vaxzone-chatbot__utility-row,
+.vaxzone-chatbot__card-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.45rem;
+  gap: 0.5rem;
+  min-width: 0;
 }
 
 .vaxzone-chatbot__welcome-chip,
-.vaxzone-chatbot__chip {
+.vaxzone-chatbot__chip,
+.vaxzone-chatbot__utility-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 32px;
-  padding: 0.45rem 0.72rem;
+  min-height: 44px;
+  max-width: 100%;
+  padding: 0.55rem 0.8rem;
   border: 1px solid color-mix(in srgb, var(--border-color) 96%, transparent);
   border-radius: 999px;
   background: color-mix(in srgb, var(--surface-color) 94%, transparent);
   color: var(--text-color);
   font-size: 0.76rem;
   font-weight: 700;
-  line-height: 1.2;
+  line-height: 1.25;
+  text-align: center;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  touch-action: manipulation;
 }
 
 .vaxzone-chatbot__welcome-chip:hover,
-.vaxzone-chatbot__chip:hover {
+.vaxzone-chatbot__chip:hover,
+.vaxzone-chatbot__utility-button:hover {
   background: color-mix(in srgb, var(--primary-soft) 78%, transparent);
   color: var(--primary-color);
 }
@@ -286,6 +526,7 @@
 
 .vaxzone-chatbot__more-actions {
   width: fit-content;
+  min-height: 44px;
   padding: 0;
   border: none;
   background: transparent;
@@ -295,10 +536,14 @@
 }
 
 .vaxzone-chatbot__messages {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 0.9rem;
+  overscroll-behavior: contain;
   background:
-    radial-gradient(circle at top left, color-mix(in srgb, var(--primary-soft) 30%, transparent), transparent 40%),
+    radial-gradient(circle at top left, color-mix(in srgb, var(--primary-soft) 24%, transparent), transparent 36%),
     linear-gradient(180deg, color-mix(in srgb, var(--bg-color) 45%, transparent), color-mix(in srgb, var(--surface-color) 96%, transparent));
 }
 
@@ -307,6 +552,7 @@
   align-items: flex-start;
   gap: 0.55rem;
   margin-bottom: 0.85rem;
+  min-width: 0;
 }
 
 .vaxzone-chatbot__message--user {
@@ -319,17 +565,22 @@
 
 .vaxzone-chatbot__message-stack {
   max-width: calc(100% - 2.4rem);
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
 }
 
 .vaxzone-chatbot__bubble {
+  width: 100%;
   max-width: 100%;
+  min-width: 0;
   padding: 0.72rem 0.82rem;
   border: 1px solid color-mix(in srgb, var(--border-color) 96%, transparent);
   border-radius: 1rem;
   box-shadow: var(--shadow-xs);
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .vaxzone-chatbot__bubble--assistant {
@@ -349,9 +600,11 @@
 
 .vaxzone-chatbot__bubble p {
   margin: 0;
-  font-size: 0.86rem;
-  line-height: 1.5;
+  font-size: 0.85rem;
+  line-height: 1.48;
   white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .vaxzone-chatbot__cards {
@@ -361,10 +614,13 @@
 }
 
 .vaxzone-chatbot__card {
+  width: 100%;
+  min-width: 0;
   padding: 0.72rem;
   border: 1px solid color-mix(in srgb, var(--border-color) 96%, transparent);
   border-radius: 0.95rem;
   background: color-mix(in srgb, var(--surface-color) 98%, transparent);
+  overflow: hidden;
 }
 
 .vaxzone-chatbot__card-topline {
@@ -372,10 +628,12 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 0.5rem;
+  min-width: 0;
 }
 
 .vaxzone-chatbot__card-copy {
   min-width: 0;
+  flex: 1 1 auto;
 }
 
 .vaxzone-chatbot__card-eyebrow {
@@ -391,12 +649,16 @@
   margin: 0;
   font-size: 0.87rem;
   line-height: 1.3;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .vaxzone-chatbot__card-subtitle {
   margin: 0.2rem 0 0;
   color: var(--text-soft);
   font-size: 0.74rem;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .vaxzone-chatbot__card-badge {
@@ -408,7 +670,10 @@
   color: var(--secondary-strong);
   font-size: 0.66rem;
   font-weight: 800;
-  white-space: nowrap;
+  white-space: normal;
+  text-align: center;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .vaxzone-chatbot__card-lines {
@@ -423,23 +688,30 @@
   align-items: center;
   justify-content: space-between;
   gap: 0.6rem;
-  padding: 0.42rem 0.55rem;
+  min-width: 0;
+  padding: 0.5rem 0.55rem;
   border-radius: 0.72rem;
   background: color-mix(in srgb, var(--surface-muted) 62%, var(--surface-color));
 }
 
 .vaxzone-chatbot__card-line span,
 .vaxzone-chatbot__stats-item span {
+  min-width: 0;
   color: var(--text-soft);
   font-size: 0.71rem;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .vaxzone-chatbot__card-line strong,
 .vaxzone-chatbot__stats-item strong {
+  min-width: 0;
   color: var(--text-color);
   font-size: 0.74rem;
   font-weight: 700;
   text-align: right;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .vaxzone-chatbot__stats-grid {
@@ -450,16 +722,18 @@
 }
 
 .vaxzone-chatbot__card-button {
-  width: 100%;
-  min-height: 34px;
-  margin-top: 0.55rem;
-  padding: 0.48rem 0.68rem;
+  min-height: 40px;
+  padding: 0.5rem 0.72rem;
   border: 1px solid color-mix(in srgb, var(--primary-color) 18%, transparent);
   border-radius: 0.8rem;
   background: color-mix(in srgb, var(--surface-color) 96%, transparent);
   color: var(--text-color);
-  font-size: 0.76rem;
+  font-size: 0.75rem;
   font-weight: 700;
+}
+
+.vaxzone-chatbot__card-button.is-secondary {
+  border-color: color-mix(in srgb, var(--border-color) 96%, transparent);
 }
 
 .vaxzone-chatbot__card-button:hover {
@@ -470,12 +744,13 @@
 .vaxzone-chatbot__feedback-row {
   display: inline-flex;
   align-items: center;
-  gap: 0.25rem;
+  gap: 0.35rem;
+  flex-wrap: wrap;
 }
 
 .vaxzone-chatbot__feedback-button {
-  width: 28px;
-  height: 28px;
+  width: 36px;
+  height: 36px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -483,7 +758,7 @@
   border-radius: 999px;
   background: transparent;
   color: var(--text-soft);
-  font-size: 0.72rem;
+  font-size: 0.8rem;
 }
 
 .vaxzone-chatbot__feedback-button:hover,
@@ -515,15 +790,23 @@
 }
 
 .vaxzone-chatbot__composer {
-  padding: 0.82rem 0.9rem 0.9rem;
+  position: relative;
+  z-index: 2;
+  padding: 0.72rem 0.9rem calc(0.9rem + env(safe-area-inset-bottom, 0px));
   border-top: 1px solid color-mix(in srgb, var(--border-color) 96%, transparent);
   background: color-mix(in srgb, var(--surface-color) 97%, transparent);
 }
 
+.vaxzone-chatbot__status-line {
+  margin-bottom: 0.5rem;
+  color: var(--text-soft);
+  font-size: 0.74rem;
+}
+
 .vaxzone-chatbot__composer-bar {
   display: flex;
-  align-items: center;
-  gap: 0.55rem;
+  align-items: flex-end;
+  gap: 0.45rem;
   padding: 0.35rem;
   border: 1px solid color-mix(in srgb, var(--border-color) 96%, transparent);
   border-radius: 1rem;
@@ -533,12 +816,13 @@
 .vaxzone-chatbot__input {
   flex: 1 1 auto;
   min-width: 0;
-  min-height: 38px;
-  padding: 0 0.7rem;
+  min-height: 44px;
+  padding: 0.25rem 0.7rem;
   border: none;
   background: transparent;
   color: var(--text-color);
-  font-size: 0.86rem;
+  font-size: 0.84rem;
+  line-height: 1.4;
 }
 
 .vaxzone-chatbot__input::placeholder {
@@ -555,8 +839,8 @@
 }
 
 .vaxzone-chatbot__send {
-  width: 38px;
-  height: 38px;
+  width: 44px;
+  height: 44px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -566,6 +850,7 @@
   background: var(--gradient-primary);
   color: #ffffff;
   box-shadow: 0 10px 22px rgba(37, 99, 235, 0.2);
+  touch-action: manipulation;
 }
 
 .vaxzone-chatbot__send:disabled {
@@ -578,11 +863,12 @@
   align-items: center;
   gap: 0.7rem;
   min-height: 56px;
+  max-width: min(100%, 320px);
   padding: 0.72rem 0.92rem;
   border: 1px solid color-mix(in srgb, var(--primary-color) 22%, transparent);
   border-radius: 999px;
   background:
-    radial-gradient(circle at top left, color-mix(in srgb, var(--info-color) 18%, transparent), transparent 48%),
+    radial-gradient(circle at top left, color-mix(in srgb, var(--info-color) 18%, transparent), transparent 42%),
     linear-gradient(135deg, color-mix(in srgb, var(--surface-color) 94%, transparent), color-mix(in srgb, var(--bg-elevated) 84%, transparent));
   color: var(--text-color);
   box-shadow: 0 24px 55px rgba(15, 23, 42, 0.16);
@@ -617,7 +903,15 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
+  min-width: 0;
   line-height: 1.15;
+}
+
+.vaxzone-chatbot__launcher-copy strong,
+.vaxzone-chatbot__launcher-copy small {
+  max-width: 100%;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .vaxzone-chatbot__launcher-copy strong {
@@ -649,6 +943,24 @@
   }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .vaxzone-chatbot__panel,
+  .vaxzone-chatbot__launcher,
+  .vaxzone-chatbot__bubble--loading span {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .vaxzone-chatbot__panel,
+  .vaxzone-chatbot__card,
+  .vaxzone-chatbot__bubble,
+  .vaxzone-chatbot__composer-bar {
+    border-width: 2px;
+  }
+}
+
 [data-theme="dark"] .vaxzone-chatbot__panel,
 [data-theme="dark"] .vaxzone-chatbot__launcher {
   border-color: rgba(148, 163, 184, 0.18);
@@ -663,13 +975,13 @@
 
 [data-theme="dark"] .vaxzone-chatbot__welcome {
   background:
-    radial-gradient(circle at top left, rgba(59, 130, 246, 0.14), transparent 42%),
+    radial-gradient(circle at top left, rgba(59, 130, 246, 0.12), transparent 36%),
     linear-gradient(180deg, rgba(15, 23, 42, 0.92), rgba(17, 24, 39, 0.98));
 }
 
 [data-theme="dark"] .vaxzone-chatbot__messages {
   background:
-    radial-gradient(circle at top left, rgba(59, 130, 246, 0.12), transparent 38%),
+    radial-gradient(circle at top left, rgba(59, 130, 246, 0.1), transparent 34%),
     linear-gradient(180deg, rgba(15, 23, 42, 0.88), rgba(17, 24, 39, 0.98));
 }
 
@@ -679,37 +991,33 @@
 [data-theme="dark"] .vaxzone-chatbot__stats-item,
 [data-theme="dark"] .vaxzone-chatbot__composer-bar,
 [data-theme="dark"] .vaxzone-chatbot__header-button,
+[data-theme="dark"] .vaxzone-chatbot__tool-button,
 [data-theme="dark"] .vaxzone-chatbot__welcome-chip,
 [data-theme="dark"] .vaxzone-chatbot__chip,
+[data-theme="dark"] .vaxzone-chatbot__utility-button,
 [data-theme="dark"] .vaxzone-chatbot__card-button {
   border-color: rgba(148, 163, 184, 0.18);
   background: rgba(15, 23, 42, 0.86);
 }
 
-@media (max-width: 767.98px) {
+@media (max-width: 768px) {
   .vaxzone-chatbot {
-    right: 0.65rem;
-    left: 0.65rem;
-    bottom: calc(env(safe-area-inset-bottom, 0px) + 0.65rem);
-    align-items: stretch;
+    --vaxzone-chatbot-side-gap: 12px;
+    --vaxzone-chatbot-bottom-gap: 8px;
+    --vaxzone-chatbot-panel-width: min(420px, calc(100vw - 24px));
+    right: 12px;
+    left: 12px;
+    align-items: flex-end;
+    max-width: none;
   }
 
   .vaxzone-chatbot__panel {
-    width: min(100%, calc(100vw - 20px));
-    height: min(75vh, 620px);
-    max-height: 75vh;
-    border-radius: 1.2rem;
-    transform-origin: bottom center;
-  }
-
-  .vaxzone-chatbot__launcher {
-    align-self: flex-end;
-  }
-}
-
-@media (max-width: 575.98px) {
-  .vaxzone-chatbot__panel {
-    width: calc(100vw - 20px);
+    width: var(--vaxzone-chatbot-panel-width);
+    max-width: calc(100vw - 24px);
+    height: min(650px, 80vh);
+    max-height: min(650px, calc(var(--vaxzone-chatbot-vh, 100dvh) - 16px));
+    border-radius: 18px;
+    transform-origin: bottom right;
   }
 
   .vaxzone-chatbot__chat-header,
@@ -720,11 +1028,143 @@
     padding-right: 0.82rem;
   }
 
-  .vaxzone-chatbot__welcome-title {
-    font-size: 1.12rem;
+  .vaxzone-chatbot__menu {
+    right: 0;
+  }
+
+  .vaxzone-chatbot__workspace {
+    display: block;
+  }
+
+  .vaxzone-chatbot__copilot-panel {
+    display: none;
+  }
+
+  .vaxzone-chatbot__stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .vaxzone-chatbot__card-line,
+  .vaxzone-chatbot__stats-item,
+  .vaxzone-chatbot__card-topline {
+    align-items: flex-start;
+  }
+
+  .vaxzone-chatbot__card-line,
+  .vaxzone-chatbot__stats-item {
+    flex-direction: column;
+  }
+
+  .vaxzone-chatbot__launcher {
+    min-height: 52px;
+    padding: 0.58rem 0.72rem;
+    gap: 0.55rem;
+    align-self: flex-end;
   }
 
   .vaxzone-chatbot__launcher-copy small {
     display: none;
+  }
+
+  .vaxzone-chatbot__chip-row--floating {
+    position: sticky;
+    bottom: 0;
+    padding-top: 0.35rem;
+    background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--surface-color) 96%, transparent));
+  }
+}
+
+@media (max-width: 480px) {
+  .vaxzone-chatbot {
+    --vaxzone-chatbot-side-gap: 8px;
+    --vaxzone-chatbot-bottom-gap: 8px;
+    right: 8px;
+    left: 8px;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 8px);
+  }
+
+  .vaxzone-chatbot__panel {
+    width: calc(100vw - 16px);
+    max-width: calc(100vw - 16px);
+    height: min(78vh, 620px);
+    max-height: min(620px, calc(var(--vaxzone-chatbot-vh, 100dvh) - 8px));
+    border-radius: 18px;
+  }
+
+  .vaxzone-chatbot__welcome-title {
+    font-size: 1.05rem;
+  }
+
+  .vaxzone-chatbot__welcome-copy,
+  .vaxzone-chatbot__bubble p,
+  .vaxzone-chatbot__input {
+    font-size: 0.82rem;
+  }
+
+  .vaxzone-chatbot__launcher {
+    min-height: 48px;
+    padding: 0.5rem 0.65rem;
+  }
+
+  .vaxzone-chatbot__launcher-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 999px;
+  }
+}
+
+@media (max-width: 360px) {
+  .vaxzone-chatbot {
+    --vaxzone-chatbot-side-gap: 0px;
+    --vaxzone-chatbot-bottom-gap: 0px;
+    right: 0;
+    left: 0;
+    bottom: 0;
+    gap: 0;
+  }
+
+  .vaxzone-chatbot__panel,
+  .vaxzone-chatbot__panel.is-fullscreen-mobile {
+    width: 100vw;
+    max-width: 100vw;
+    height: var(--vaxzone-chatbot-vh, 100dvh);
+    max-height: var(--vaxzone-chatbot-vh, 100dvh);
+    border-radius: 0;
+    transform-origin: bottom center;
+  }
+
+  .vaxzone-chatbot__chat-header,
+  .vaxzone-chatbot__welcome {
+    padding-top: calc(0.75rem + env(safe-area-inset-top, 0px));
+  }
+
+  .vaxzone-chatbot__composer {
+    padding-bottom: calc(0.82rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  .vaxzone-chatbot__message-stack {
+    max-width: calc(100% - 2rem);
+  }
+
+  .vaxzone-chatbot__launcher {
+    margin-right: 8px;
+    margin-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+    border-radius: 999px;
+  }
+
+  .vaxzone-chatbot__launcher-copy {
+    display: none;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 520px) {
+  .vaxzone-chatbot__panel {
+    height: min(96vh, 460px);
+  }
+
+  .vaxzone-chatbot__welcome {
+    gap: 0.45rem;
+    padding-top: 0.75rem;
+    padding-bottom: 0.75rem;
   }
 }

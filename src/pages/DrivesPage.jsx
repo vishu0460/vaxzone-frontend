@@ -12,6 +12,7 @@ import { getCountdownLabel, getDriveAvailabilityLabel, getDriveRealtimeStatus, g
 import { getRole, isAuthenticated } from "../utils/auth";
 import { buildAdminDriveActionSearch, buildAdminDriveActionState, getAdminDriveActionPath, getUnavailableDriveAdminAction, isAdminDriveRole } from "../utils/adminDriveActions";
 import { broadcastDataUpdated } from "../utils/dataSync";
+import { getAutoFeedbackUrl, setLastPromptedAutoFeedbackBookingId } from "../utils/feedbackPrompt";
 import { usePublicCatalog } from "../context/PublicCatalogContext";
 import { DEFAULT_VISIBLE_COUNT, getDisplayedItems, matchesSmartSearch, shouldShowViewMore } from "../utils/listSearch";
 import { successToast } from "../utils/toast";
@@ -514,9 +515,17 @@ export default function DrivesPage() {
       successToast("Slot booked successfully");
       broadcastDataUpdated({ source: "drives-page-booking" });
       await refreshCatalog();
+      const bookingId = Number(booking?.id);
+      if (Number.isFinite(bookingId)) {
+        setLastPromptedAutoFeedbackBookingId(bookingId);
+      }
       window.setTimeout(() => {
         closeBookingModal();
-        navigate("/user/bookings");
+        navigate(getAutoFeedbackUrl({
+          bookingId,
+          returnTo: "/user/bookings",
+          subject: "booking"
+        }));
       }, 500);
     } catch (requestError) {
       setBookingMessage(getErrorMessage(requestError, "Failed to book this slot."));

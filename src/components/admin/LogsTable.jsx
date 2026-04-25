@@ -103,7 +103,7 @@ export default function LogsTable({
                   <small className="text-muted">{entry.source || entry.service || 'Backend'}</small>
                 </td>
                 <td className="logs-table__level-cell">{levelBadge(mode === 'security' ? entry.actionType : entry.level)}</td>
-                <td className="logs-table__summary-cell" style={{ minWidth: '320px' }}>
+                <td className="logs-table__summary-cell">
                   <div className="fw-medium">{mode === 'security' ? entry.readableMessage : humanizeSystemMessage(entry)}</div>
                   <small className="text-muted d-block mt-1">{mode === 'security' ? entry.rawDetails : entry.message || entry.raw || 'N/A'}</small>
                   {entry.stackTrace ? (

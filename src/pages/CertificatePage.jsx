@@ -1,13 +1,10 @@
-import React, { useEffect, useRef, useState } from "react";
-import html2canvas from "html2canvas";
-import { jsPDF } from "jspdf";
-import QRCode from "qrcode";
-import { useNavigate } from "react-router-dom";
+import React, { Suspense, lazy, useEffect, useRef, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { certificateAPI, unwrapApiData } from "../api/client";
+import AppLoadingFallback from "../components/AppLoadingFallback";
 import Skeleton from "../components/Skeleton";
 import EmptyState from "../components/EmptyState";
 import Modal from "../components/ui/Modal";
-import CertificatePreview from "../components/CertificatePreview";
 import { errorToast } from "../utils/toast";
 import {
   buildCertificateFileName,
@@ -17,12 +14,16 @@ import {
   getVerificationPath,
   getVerificationUrl
 } from "../utils/certificateDocument";
+import { lazyWithRetry } from "../utils/lazyWithRetry";
 
 const EXPORT_WIDTH = 1400;
 const EXPORT_SCALE = 2;
+const loadCertificatePreview = () => import("../components/CertificatePreview");
+const CertificatePreview = lazy(lazyWithRetry(loadCertificatePreview, "certificate-preview"));
 
 export default function CertificatePage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [certificates, setCertificates] = useState([]);
   const [downloadHistory, setDownloadHistory] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -35,6 +36,28 @@ export default function CertificatePage() {
   useEffect(() => {
     fetchCertificateData();
   }, []);
+
+  useEffect(() => {
+    if (!selectedCert || certificates.length === 0) {
+      return;
+    }
+
+    const certificateId = searchParams.get("certificateId");
+    const requestedDownload = searchParams.get("download");
+
+    if (certificateId) {
+      const matchedCertificate = certificates.find((certificate) => String(certificate.id) === String(certificateId));
+      if (matchedCertificate && matchedCertificate.id !== selectedCert.id) {
+        setSelectedCert(matchedCertificate);
+        return;
+      }
+    }
+
+    if (requestedDownload && ["pdf", "png", "image"].includes(requestedDownload.toLowerCase())) {
+      downloadCertificate(selectedCert, requestedDownload.toLowerCase() === "pdf" ? "pdf" : "png");
+      setSearchParams({}, { replace: true });
+    }
+  }, [certificates, searchParams, selectedCert, setSearchParams]);
 
   useEffect(() => {
     if (!selectedCert) {
@@ -100,6 +123,7 @@ export default function CertificatePage() {
 
   const generateQRCode = async (certificate) => {
     try {
+      const { default: QRCode } = await import("qrcode");
       return await QRCode.toDataURL(getVerificationUrl(certificate), {
         width: 280,
         margin: 1,
@@ -144,6 +168,7 @@ export default function CertificatePage() {
     }
 
     await waitForPreviewAssets(node);
+    const { default: html2canvas } = await import("html2canvas");
 
     return html2canvas(node, {
       backgroundColor: getComputedStyle(document.documentElement).getPropertyValue("--certificate-export-bg").trim() || "#f4f7fa",
@@ -172,7 +197,9 @@ export default function CertificatePage() {
 
   const downloadCertificate = async (certificate, format) => {
     try {
+      await loadCertificatePreview();
       await recordDownload(certificate, format === "pdf" ? "PDF" : "IMAGE");
+      await new Promise((resolve) => window.requestAnimationFrame(() => window.requestAnimationFrame(resolve)));
       const canvas = await renderCertificateCanvas();
       const imageData = canvas.toDataURL("image/png");
 
@@ -184,6 +211,7 @@ export default function CertificatePage() {
         return;
       }
 
+      const { jsPDF } = await import("jspdf");
       const doc = new jsPDF({
         orientation: canvas.width >= canvas.height ? "landscape" : "portrait",
         unit: "px",
@@ -255,7 +283,9 @@ export default function CertificatePage() {
 
       <div className="row g-4">
         <div className="col-xl-8">
-          <CertificatePreview certificate={selectedCert} qrCodeUrl={selectedQrCodeUrl} />
+          <Suspense fallback={<Skeleton height="520px" />}>
+            <CertificatePreview certificate={selectedCert} qrCodeUrl={selectedQrCodeUrl} />
+          </Suspense>
         </div>
         <div className="col-xl-4">
           {selectedCert ? (
@@ -311,12 +341,14 @@ export default function CertificatePage() {
 
       {selectedCert ? (
         <div className="certificate-export-stage" aria-hidden="true">
-          <CertificatePreview
-            ref={exportPreviewRef}
-            certificate={selectedCert}
-            qrCodeUrl={selectedQrCodeUrl}
-            exportMode
-          />
+          <Suspense fallback={<AppLoadingFallback variant="section" title="Preparing certificate export" description="Loading verified preview assets." />}>
+            <CertificatePreview
+              ref={exportPreviewRef}
+              certificate={selectedCert}
+              qrCodeUrl={selectedQrCodeUrl}
+              exportMode
+            />
+          </Suspense>
         </div>
       ) : null}
 

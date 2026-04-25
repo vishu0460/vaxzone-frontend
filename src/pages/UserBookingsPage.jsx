@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { jsPDF } from "jspdf";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import api, { certificateAPI, newsAPI, publicAPI, unwrapApiData, userAPI } from "../api/client";
 import ModalPopup from "../components/ModalPopup";
@@ -11,7 +10,7 @@ import { getCountdownLabel, getRealtimeStatus, getStatusBadgeClass, isAtCapacity
 import { compareBookingsByAppointmentStart, getBookingAppointmentStart, isBookingUpcoming } from "../utils/bookingSchedule";
 import { broadcastDataUpdated, subscribeToDataUpdates } from "../utils/dataSync";
 import { formatCertificateDate, formatCertificateDateTime, getCalculatedAge, getDoseLabel } from "../utils/certificateDocument";
-import { getLastPromptedAutoFeedbackBookingId, getSubmittedAutoFeedbackBookingIds, setLastPromptedAutoFeedbackBookingId } from "../utils/feedbackPrompt";
+import { getAutoFeedbackUrl, setLastPromptedAutoFeedbackBookingId } from "../utils/feedbackPrompt";
 import { usePublicCatalog } from "../context/PublicCatalogContext";
 
 const REPLY_NOTIFICATION_TYPES = new Set(["CONTACT_REPLY", "FEEDBACK_REPLY"]);
@@ -424,8 +423,6 @@ export default function UserBookingsPage() {
   const bookingsSectionRef = useRef(null);
   const slotsSectionRef = useRef(null);
   const notificationsSectionRef = useRef(null);
-  const completionPromptInitializedRef = useRef(false);
-  const knownCompletedBookingIdsRef = useRef(new Set());
   const now = useCurrentTime(1000);
 
   const formatAppointmentTime = (value) => {
@@ -702,59 +699,18 @@ export default function UserBookingsPage() {
   }, [location, scrollToDashboardSection]);
 
   useEffect(() => {
-    if (!Array.isArray(bookings)) {
-      return;
-    }
+    const searchParams = new URLSearchParams(location.search);
+    const nextSlotFilters = {
+      ...DEFAULT_SLOT_FILTERS,
+      city: searchParams.get("city") || "",
+      date: searchParams.get("date") || "",
+      vaccine: searchParams.get("vaccine") || ""
+    };
 
-    const completedBookings = bookings
-      .filter((booking) => booking.status === "COMPLETED")
-      .slice()
-      .sort((left, right) => {
-        const leftTime = getBookingAppointmentStart(left);
-        const rightTime = getBookingAppointmentStart(right);
-        return (rightTime ? rightTime.getTime() : 0) - (leftTime ? leftTime.getTime() : 0);
-      });
-
-    const completedBookingIds = new Set(completedBookings.map((booking) => Number(booking.id)).filter(Number.isFinite));
-    const submittedBookingIds = new Set(getSubmittedAutoFeedbackBookingIds());
-    const latestCompletedWithoutFeedback = completedBookings.find((booking) => !submittedBookingIds.has(Number(booking.id)));
-    const hasUnreadCompletionNotification = notifications.some((notification) => notification.type === "VACCINATION_COMPLETED" && !notification.read);
-    const hasNewCompletion = [...completedBookingIds].some((bookingId) => !knownCompletedBookingIdsRef.current.has(bookingId));
-
-    if (!completionPromptInitializedRef.current) {
-      completionPromptInitializedRef.current = true;
-      knownCompletedBookingIdsRef.current = completedBookingIds;
-
-      if (!hasUnreadCompletionNotification || !latestCompletedWithoutFeedback) {
-        return;
-      }
-    } else {
-      knownCompletedBookingIdsRef.current = completedBookingIds;
-
-      if (!hasNewCompletion && !hasUnreadCompletionNotification) {
-        return;
-      }
-    }
-
-    if (!latestCompletedWithoutFeedback) {
-      return;
-    }
-
-    const bookingId = Number(latestCompletedWithoutFeedback.id);
-    if (getLastPromptedAutoFeedbackBookingId() === bookingId) {
-      return;
-    }
-
-    const returnTo = `${location.pathname}${location.search}${location.hash}`;
-    const feedbackParams = new URLSearchParams({
-      autoClose: "1",
-      bookingId: String(bookingId),
-      returnTo: encodeURIComponent(returnTo || "/user/bookings")
-    });
-
-    setLastPromptedAutoFeedbackBookingId(bookingId);
-    navigate(`/feedback?${feedbackParams.toString()}`);
-  }, [bookings, location.hash, location.pathname, location.search, navigate, notifications]);
+    setSlotFilters((current) => JSON.stringify(current) === JSON.stringify({ ...current, ...nextSlotFilters })
+      ? current
+      : { ...current, ...nextSlotFilters });
+  }, [location.search]);
 
   const buildBookingPayload = (slotId) => {
     const selectedSlot = slotCatalog.find((slot) => slot.id === slotId) || availableSlots.find((slot) => slot.id === slotId);
@@ -831,6 +787,7 @@ export default function UserBookingsPage() {
           ? receiptTheme.sky
           : receiptTheme.rose;
 
+    const { jsPDF } = await import("jspdf");
     const doc = new jsPDF({ unit: 'pt', format: 'a4' });
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
@@ -1216,12 +1173,20 @@ export default function UserBookingsPage() {
           ? `Booking request submitted successfully. Your appointment time: ${formatAppointmentTime(assignedTime)}`
           : "Booking request submitted successfully."
       );
+      const bookingId = Number(booking?.id);
+      if (Number.isFinite(bookingId)) {
+        setLastPromptedAutoFeedbackBookingId(bookingId);
+      }
       setSelectedSlot(null);
       setManualSlotId("");
       broadcastDataUpdated({ source: "user-bookings-book" });
       await refreshCatalog();
       await Promise.all([loadData({ silent: true }), loadAvailableSlots({ silent: true })]);
-      openDashboardTab("bookings", { replace: true });
+      navigate(getAutoFeedbackUrl({
+        bookingId,
+        returnTo: "/user/bookings",
+        subject: "booking"
+      }));
     } catch (error) {
       setBookingError(error.response?.data?.message || "Failed to book slot. Please try again.");
       setMsg(error.response?.data?.message || "Failed to book slot. Please try again.");
