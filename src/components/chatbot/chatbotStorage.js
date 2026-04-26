@@ -17,6 +17,56 @@ export const CHATBOT_STORAGE_KEYS = {
 
 const isBrowser = () => typeof window !== "undefined";
 
+const readRawStorageValue = (storage, key) => {
+  if (!storage) {
+    return "";
+  }
+
+  try {
+    return String(storage.getItem(key) || "");
+  } catch (error) {
+    return "";
+  }
+};
+
+const readAuthStorageValue = (key) => {
+  if (!isBrowser()) {
+    return "";
+  }
+
+  return readRawStorageValue(window.localStorage, key) || readRawStorageValue(window.sessionStorage, key);
+};
+
+const normalizeScopeToken = (value, fallback) => {
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+
+  return normalized || fallback;
+};
+
+const getChatbotStorageScope = () => {
+  if (!isBrowser()) {
+    return "guest";
+  }
+
+  const accessToken = readAuthStorageValue("accessToken");
+  const role = normalizeScopeToken(readAuthStorageValue("role"), "user");
+  const email = normalizeScopeToken(readAuthStorageValue("email"), "");
+  const name = normalizeScopeToken(readAuthStorageValue("name"), "");
+
+  if (!accessToken) {
+    return "guest";
+  }
+
+  return `${role}:${email || name || "account"}`;
+};
+
+const getScopedStorageKey = (key) => `${key}:${getChatbotStorageScope()}`;
+
 const readJson = (storage, key, fallback) => {
   if (!storage) {
     return fallback;
@@ -28,6 +78,20 @@ const readJson = (storage, key, fallback) => {
   } catch (error) {
     return fallback;
   }
+};
+
+const readScopedJson = (storage, key, fallback) => {
+  const scopedKey = getScopedStorageKey(key);
+  const scopedRawValue = readRawStorageValue(storage, scopedKey);
+  if (scopedRawValue) {
+    return readJson(storage, scopedKey, fallback);
+  }
+
+  return readJson(storage, key, fallback);
+};
+
+const writeScopedJson = (storage, key, value) => {
+  writeJson(storage, getScopedStorageKey(key), value);
 };
 
 const writeJson = (storage, key, value) => {
@@ -119,7 +183,7 @@ export const writeChatbotUiState = (value) => {
 };
 
 export const readChatbotHistory = () =>
-  isBrowser() ? sanitizeStoredMessages(readJson(window.localStorage, CHATBOT_STORAGE_KEYS.history, [])) : [];
+  isBrowser() ? sanitizeStoredMessages(readScopedJson(window.localStorage, CHATBOT_STORAGE_KEYS.history, [])) : [];
 
 export const writeChatbotHistory = (messages, limit = DEFAULT_HISTORY_LIMIT) => {
   if (!isBrowser()) {
@@ -128,13 +192,13 @@ export const writeChatbotHistory = (messages, limit = DEFAULT_HISTORY_LIMIT) => 
 
   writeJson(
     window.localStorage,
-    CHATBOT_STORAGE_KEYS.history,
+    getScopedStorageKey(CHATBOT_STORAGE_KEYS.history),
     sanitizeStoredMessages(messages).slice(-limit)
   );
 };
 
 export const readChatbotSessionState = () =>
-  isBrowser() ? readJson(window.sessionStorage, CHATBOT_STORAGE_KEYS.session, null) : null;
+  isBrowser() ? readScopedJson(window.sessionStorage, CHATBOT_STORAGE_KEYS.session, null) : null;
 
 export const writeChatbotSessionState = (value) => {
   if (!isBrowser()) {
@@ -142,18 +206,18 @@ export const writeChatbotSessionState = (value) => {
   }
 
   if (!value) {
-    window.sessionStorage.removeItem(CHATBOT_STORAGE_KEYS.session);
+    window.sessionStorage.removeItem(getScopedStorageKey(CHATBOT_STORAGE_KEYS.session));
     return;
   }
 
-  writeJson(window.sessionStorage, CHATBOT_STORAGE_KEYS.session, value);
+  writeScopedJson(window.sessionStorage, CHATBOT_STORAGE_KEYS.session, value);
 };
 
 const sanitizePreferenceValue = (value, maxLength = 120) => String(value || "").slice(0, maxLength);
 
 export const readChatbotPreferences = () =>
   isBrowser()
-    ? readJson(window.localStorage, CHATBOT_STORAGE_KEYS.preferences, {
+    ? readScopedJson(window.localStorage, CHATBOT_STORAGE_KEYS.preferences, {
       preferredCity: "",
       preferredVaccineType: "",
       preferredTime: "",
@@ -177,7 +241,7 @@ export const writeChatbotPreferences = (value) => {
     return;
   }
 
-  writeJson(window.localStorage, CHATBOT_STORAGE_KEYS.preferences, {
+  writeScopedJson(window.localStorage, CHATBOT_STORAGE_KEYS.preferences, {
     preferredCity: sanitizePreferenceValue(value?.preferredCity),
     preferredVaccineType: sanitizePreferenceValue(value?.preferredVaccineType),
     preferredTime: sanitizePreferenceValue(value?.preferredTime),
@@ -199,20 +263,20 @@ export const mergeChatbotPreferences = (patch) => {
 };
 
 export const readChatbotMessageFeedback = () =>
-  isBrowser() ? readJson(window.localStorage, CHATBOT_STORAGE_KEYS.feedback, {}) : {};
+  isBrowser() ? readScopedJson(window.localStorage, CHATBOT_STORAGE_KEYS.feedback, {}) : {};
 
 export const writeChatbotMessageFeedback = (value) => {
   if (isBrowser()) {
-    writeJson(window.localStorage, CHATBOT_STORAGE_KEYS.feedback, value || {});
+    writeScopedJson(window.localStorage, CHATBOT_STORAGE_KEYS.feedback, value || {});
   }
 };
 
 export const readChatbotOnboardingState = () =>
-  isBrowser() ? readJson(window.localStorage, CHATBOT_STORAGE_KEYS.onboarding, {}) : {};
+  isBrowser() ? readScopedJson(window.localStorage, CHATBOT_STORAGE_KEYS.onboarding, {}) : {};
 
 export const writeChatbotOnboardingState = (value) => {
   if (isBrowser()) {
-    writeJson(window.localStorage, CHATBOT_STORAGE_KEYS.onboarding, value || {});
+    writeScopedJson(window.localStorage, CHATBOT_STORAGE_KEYS.onboarding, value || {});
   }
 };
 
@@ -231,7 +295,7 @@ const sanitizeRecentAction = (item) => {
 
 export const readChatbotRecentActions = () =>
   isBrowser()
-    ? (readJson(window.localStorage, CHATBOT_STORAGE_KEYS.recentActions, []) || [])
+    ? (readScopedJson(window.localStorage, CHATBOT_STORAGE_KEYS.recentActions, []) || [])
       .map(sanitizeRecentAction)
       .filter(Boolean)
       .slice(0, 5)
@@ -255,16 +319,16 @@ export const pushChatbotRecentAction = (item) => {
     ...readChatbotRecentActions().filter((entry) => entry.prompt !== normalized.prompt)
   ].slice(0, 5);
 
-  writeJson(window.localStorage, CHATBOT_STORAGE_KEYS.recentActions, nextValue);
+  writeScopedJson(window.localStorage, CHATBOT_STORAGE_KEYS.recentActions, nextValue);
   return nextValue;
 };
 
 export const readChatbotDemoMode = () =>
-  isBrowser() ? Boolean(readJson(window.localStorage, CHATBOT_STORAGE_KEYS.demoMode, false)) : false;
+  isBrowser() ? Boolean(readScopedJson(window.localStorage, CHATBOT_STORAGE_KEYS.demoMode, false)) : false;
 
 export const writeChatbotDemoMode = (value) => {
   if (isBrowser()) {
-    writeJson(window.localStorage, CHATBOT_STORAGE_KEYS.demoMode, Boolean(value));
+    writeScopedJson(window.localStorage, CHATBOT_STORAGE_KEYS.demoMode, Boolean(value));
   }
 };
 
@@ -285,12 +349,12 @@ const sanitizeListEntry = (entry, maxLabel = 120, maxValue = 280) => {
 
 const readLocalList = (key) =>
   isBrowser()
-    ? (readJson(window.localStorage, key, []) || []).map(sanitizeListEntry).filter(Boolean).slice(0, 12)
+    ? (readScopedJson(window.localStorage, key, []) || []).map(sanitizeListEntry).filter(Boolean).slice(0, 12)
     : [];
 
 const writeLocalList = (key, items) => {
   if (isBrowser()) {
-    writeJson(window.localStorage, key, (items || []).map(sanitizeListEntry).filter(Boolean).slice(0, 12));
+    writeScopedJson(window.localStorage, key, (items || []).map(sanitizeListEntry).filter(Boolean).slice(0, 12));
   }
 };
 
@@ -316,7 +380,7 @@ export const pushChatbotRecentSearch = (entry) => pushLocalListItem(CHATBOT_STOR
 
 export const readChatbotMacros = () =>
   isBrowser()
-    ? readJson(window.localStorage, CHATBOT_STORAGE_KEYS.macros, {
+    ? readScopedJson(window.localStorage, CHATBOT_STORAGE_KEYS.macros, {
       morning_admin_check: ["what needs my attention?", "backend status", "show pending contacts"],
       my_bookings: ["show my bookings"],
       my_certificates: ["show my certificates"],
@@ -331,7 +395,7 @@ export const readChatbotMacros = () =>
 
 export const writeChatbotMacros = (value) => {
   if (isBrowser()) {
-    writeJson(window.localStorage, CHATBOT_STORAGE_KEYS.macros, value || {});
+    writeScopedJson(window.localStorage, CHATBOT_STORAGE_KEYS.macros, value || {});
   }
 };
 

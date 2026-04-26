@@ -231,17 +231,14 @@ const buildReceiptLine = (...parts) => parts.map((part) => String(part || "").tr
 const loadReceiptLogoDataUrl = async () => {
   if (!receiptLogoDataUrlPromise) {
     receiptLogoDataUrlPromise = (async () => {
-      const response = await fetch("/assets/logo/vaxzone-logo.svg");
-      const svgText = await response.text();
-      const blob = new Blob([svgText], { type: "image/svg+xml;charset=utf-8" });
-      const objectUrl = URL.createObjectURL(blob);
+      const imageUrl = "/assets/logo/vaxzone-logo-report.png";
 
       try {
         const image = await new Promise((resolve, reject) => {
           const nextImage = new Image();
           nextImage.onload = () => resolve(nextImage);
           nextImage.onerror = reject;
-          nextImage.src = objectUrl;
+          nextImage.src = imageUrl;
         });
 
         const canvas = document.createElement("canvas");
@@ -254,8 +251,8 @@ const loadReceiptLogoDataUrl = async () => {
 
         context.drawImage(image, 0, 0, canvas.width, canvas.height);
         return canvas.toDataURL("image/png");
-      } finally {
-        URL.revokeObjectURL(objectUrl);
+      } catch {
+        return null;
       }
     })().catch(() => null);
   }

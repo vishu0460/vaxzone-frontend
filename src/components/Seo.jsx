@@ -4,7 +4,7 @@ import { resolveCanonicalUrl, resolvePublicAssetUrl } from "../config/runtime";
 
 const DEFAULT_TITLE = "VaxZone | Smart Vaccination Scheduling Platform";
 const DEFAULT_DESCRIPTION = "Production-ready vaccination booking, certificate verification, drive discovery, and admin analytics in one secure platform.";
-const DEFAULT_IMAGE = "/assets/logo/vaxzone-logo.svg";
+const DEFAULT_IMAGE = "/assets/logo/vaxzone-logo-report.png";
 
 export default function Seo({
   title = DEFAULT_TITLE,

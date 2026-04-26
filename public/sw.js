@@ -1,9 +1,9 @@
-const CACHE_NAME = "vaxzone-static-v2";
+const CACHE_NAME = "vaxzone-static-v3";
 const OFFLINE_ASSETS = [
   "/",
   "/manifest.webmanifest",
   "/robots.txt",
-  "/assets/logo/vaxzone-logo.svg"
+  "/assets/logo/vaxzone-logo-report.png"
 ];
 
 self.addEventListener("install", (event) => {

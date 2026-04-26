@@ -10,6 +10,7 @@ import {
   validateConfirmPassword,
   validateDob,
   validateFullName,
+  validateGender,
   validateOtp,
   validatePassword,
   validatePhone
@@ -21,6 +22,7 @@ const DEFAULT_PROFILE_FORM = {
   fullName: '',
   email: '',
   phoneNumber: '',
+  gender: '',
   address: '',
   dob: '',
   profileImage: ''
@@ -67,6 +69,7 @@ const buildProfileForm = (profile) => ({
   fullName: profile?.fullName || '',
   email: profile?.email || '',
   phoneNumber: profile?.phoneNumber || '',
+  gender: profile?.gender || '',
   address: profile?.address || '',
   dob: profile?.dob || '',
   profileImage: profile?.profileImage || ''
@@ -227,6 +230,11 @@ export default function ProfilePage() {
       }
     }
 
+    const genderError = validateGender(profileForm.gender);
+    if (genderError) {
+      nextErrors.gender = genderError;
+    }
+
     if (profileForm.dob.trim()) {
       const dobError = validateDob(profileForm.dob);
       if (dobError) {
@@ -332,6 +340,7 @@ export default function ProfilePage() {
       const response = await userAPI.updateProfile({
         fullName: profileForm.fullName.trim(),
         phoneNumber: profileForm.phoneNumber.trim(),
+        gender: profileForm.gender,
         address: profileForm.address.trim(),
         dob: profileForm.dob || null,
         profileImage: profileForm.profileImage || null
@@ -454,6 +463,9 @@ export default function ProfilePage() {
               <Badge bg={profile?.enabled ? 'success' : 'secondary'}>
                 {profile?.enabled ? 'Active' : 'Inactive'}
               </Badge>
+              <Badge bg={profile?.gender ? 'info' : 'warning'} text={profile?.gender ? undefined : 'dark'}>
+                {profile?.gender || 'Gender missing'}
+              </Badge>
             </div>
 
             <div className="profile-page__meta">
@@ -498,6 +510,11 @@ export default function ProfilePage() {
 
             {activeTab === 'profile' ? (
               <div className="mt-4" id="profile-information" ref={profileInfoRef}>
+                {!profile?.gender ? (
+                  <Alert variant="warning" className="mb-4">
+                    Add your gender to complete your profile and keep certificate details accurate.
+                  </Alert>
+                ) : null}
                 <div className="profile-page__section-header">
                   <div>
                     <h3 className="mb-1">Profile Information</h3>
@@ -543,6 +560,23 @@ export default function ProfilePage() {
                           placeholder="Add your phone number"
                         />
                         <Form.Control.Feedback type="invalid">{profileErrors.phoneNumber}</Form.Control.Feedback>
+                      </Form.Group>
+                    </Col>
+                    <Col md={6}>
+                      <Form.Group>
+                        <Form.Label>Gender</Form.Label>
+                        <Form.Select
+                          value={profileForm.gender}
+                          onChange={(event) => handleProfileFieldChange('gender', event.target.value)}
+                          isInvalid={Boolean(profileErrors.gender)}
+                          disabled={!editing}
+                        >
+                          <option value="">Select gender</option>
+                          <option value="Male">Male</option>
+                          <option value="Female">Female</option>
+                          <option value="Other">Other</option>
+                        </Form.Select>
+                        <Form.Control.Feedback type="invalid">{profileErrors.gender}</Form.Control.Feedback>
                       </Form.Group>
                     </Col>
                     <Col md={6}>

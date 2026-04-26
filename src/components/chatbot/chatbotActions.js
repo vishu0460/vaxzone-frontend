@@ -72,6 +72,35 @@ const safeText = (value, fallback = "Not available") => {
   return normalized || fallback;
 };
 
+const normalizeLookupText = (value) =>
+  String(value || "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+
+const normalizeCityValue = (value) =>
+  normalizeLookupText(value)
+    .replace(/\b(in|me|mein|city|near|nearby|around)\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const titleCaseText = (value) =>
+  String(value || "")
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+
+const isDebugChatbotEnabled = () =>
+  typeof import.meta !== "undefined" && Boolean(import.meta.env?.DEV);
+
+const debugChatbot = (stage, payload) => {
+  if (!isDebugChatbotEnabled() || typeof console === "undefined") {
+    return;
+  }
+  console.debug(`[Ask VaxZone] ${stage}`, payload);
+};
+
 const formatDate = (value, options = { weekday: "short", month: "short", day: "numeric" }) => {
   if (!value) {
     return "Pending";
@@ -130,6 +159,11 @@ const mergeConversationParams = (previousState, parsed, pageContext) => {
     currentSection: pageContext?.section || previousParams.currentSection || ""
   };
 
+  if (!merged.city && pageContext?.city) {
+    merged.city = pageContext.city;
+    merged.selectedCity = pageContext.city;
+  }
+
   const pendingParam = previousState?.pendingParam || "";
   if (
     pendingParam
@@ -158,6 +192,9 @@ const mergeConversationParams = (previousState, parsed, pageContext) => {
   if (merged.certificateNumber) {
     merged.selectedCertificate = merged.certificateNumber;
   }
+  if (merged.bookingStatusFilter) {
+    merged.selectedBookingFilter = merged.bookingStatusFilter;
+  }
 
   return merged;
 };
@@ -180,6 +217,7 @@ const createState = (intent, params, pendingParam = "", pendingQuestion = "") =>
     userId: params.userId || "",
     roleTarget: params.roleTarget || "",
     analyticsMetric: params.analyticsMetric || "",
+    bookingStatusFilter: params.bookingStatusFilter || "",
     exportTarget: params.exportTarget || "",
     age: params.age || "",
     dateOfBirth: params.dateOfBirth || "",
@@ -195,6 +233,7 @@ const createState = (intent, params, pendingParam = "", pendingQuestion = "") =>
     selectedDrive: params.selectedDrive || params.driveId || "",
     selectedSlot: params.selectedSlot || params.slotId || "",
     selectedBooking: params.selectedBooking || params.bookingId || "",
+    selectedBookingFilter: params.selectedBookingFilter || params.bookingStatusFilter || "",
     selectedCertificate: params.selectedCertificate || params.certificateNumber || "",
     currentRoute: params.currentRoute || "",
     currentTab: params.currentTab || "",
@@ -606,16 +645,43 @@ const buildStatsCard = (title, metrics, route) =>
 
 const buildPermissionReply = (role, pageContext) =>
   buildReply({
-    text: getRestrictedActionMessage(role),
+    text: `${getRestrictedActionMessage(role)} I can still help with allowed actions for your current role.`,
     suggestions: buildSuggestions(role, pageContext, 4)
   });
 
 const buildClarifyReply = (role, pageContext) =>
   buildReply({
-    text: "I can help with bookings, certificates, centers, drives, notifications, support, and admin dashboards.",
-    suggestions: buildTryAsking(role, pageContext),
+    text: "I can help you find centers, check drives, book a slot, view bookings, or open certificates. What do you need?",
+    suggestions: buildTryAsking(role, pageContext).slice(0, 4),
     state: null
   });
+
+const buildSmallTalkReply = (intent, role, pageContext) => {
+  switch (intent) {
+    case CHATBOT_INTENTS.GREETING:
+      return buildReply({
+        text: "Hi! How can I help you with vaccination today?",
+        suggestions: buildTryAsking(role, pageContext).slice(0, 4)
+      });
+    case CHATBOT_INTENTS.THANKS:
+      return buildReply({
+        text: "You're welcome.",
+        suggestions: buildSuggestions(role, pageContext, 4)
+      });
+    case CHATBOT_INTENTS.GOODBYE:
+      return buildReply({
+        text: "Bye. I'm here whenever you need help.",
+        suggestions: buildSuggestions(role, pageContext, 3)
+      });
+    case CHATBOT_INTENTS.ACKNOWLEDGEMENT:
+      return buildReply({
+        text: "Sure. What would you like to do next?",
+        suggestions: buildSuggestions(role, pageContext, 4)
+      });
+    default:
+      return null;
+  }
+};
 
 const buildMissingFeatureReply = (route, text, role, pageContext) =>
   buildReply({
@@ -635,114 +701,384 @@ const buildFilterSuggestions = (basePrompt, params = {}) => {
   ];
 };
 
-const getCurrentPosition = () => new Promise((resolve, reject) => {
+const buildDriveQuerySuggestions = (params = {}, role = CHATBOT_ROLES.GUEST) => {
+  const city = params.city || params.selectedCity || "Delhi";
+  return [
+    { label: "Show all active drives", kind: "repeat", prompt: "show all active drives" },
+    { label: `Search ${city}`, kind: "repeat", prompt: `find drives in ${city}` },
+    { label: "Search another city", kind: "repeat", prompt: "find drives in Mumbai" },
+    { label: "Find nearby centers", kind: "repeat", prompt: "nearby center dikhao" }
+  ].slice(0, role === CHATBOT_ROLES.GUEST ? 4 : 4);
+};
+
+const buildLocationAwareSuggestions = (params = {}, fallbackPrompts = []) => {
+  const city = safeText(params.city || params.selectedCity, "");
+  const items = [
+    city ? { label: "Show all active drives", kind: "repeat", prompt: "show all active drives" } : null,
+    city ? { label: "Find nearby centers", kind: "repeat", prompt: `nearby center dikhao${city ? ` in ${city}` : ""}` } : null,
+    { label: "Search another city", kind: "repeat", prompt: "find drives in Mumbai" },
+    ...fallbackPrompts.map((prompt) => ({ label: prompt, kind: "repeat", prompt }))
+  ].filter(Boolean);
+
+  return items.slice(0, 4);
+};
+
+const getProfileCity = async () => {
+  try {
+    const response = await userAPI.getProfile();
+    const profile = unwrapApiData(response) || {};
+    const city = safeText(profile.city || profile.userCity || "", "");
+    return city || "";
+  } catch (error) {
+    return "";
+  }
+};
+
+const inferCityFromBrowserLocation = async () => {
   if (typeof navigator === "undefined" || !navigator.geolocation) {
-    reject(new Error("geolocation-not-supported"));
-    return;
+    return "";
   }
 
-  navigator.geolocation.getCurrentPosition(resolve, reject, {
-    enableHighAccuracy: false,
-    timeout: 10000,
-    maximumAge: 120000
+  const position = await new Promise((resolve, reject) => {
+    navigator.geolocation.getCurrentPosition(resolve, reject, {
+      enableHighAccuracy: false,
+      timeout: 8000,
+      maximumAge: 180000
+    });
   });
+
+  const response = await publicAPI.getNearbyCenters({
+    lat: position.coords.latitude,
+    lng: position.coords.longitude,
+    limit: 1
+  });
+  const payload = unwrapApiData(response) || {};
+  const inferredCity = safeText(payload.detectedCity || payload.centers?.[0]?.city || "", "");
+  return inferredCity || "";
+};
+
+const shouldResolveCurrentCity = (params = {}) =>
+  Boolean(params.wantsNearby || params.wantsCurrentCity || /\bmy city\b|\bcurrent city\b|\bmy location\b|\bcurrent location\b/i.test(params.rawInput || ""));
+
+const markResolvedContext = (params = {}) => ({
+  ...params,
+  __contextResolved: true
 });
 
+const withResolvedContext = async (params = {}, role = CHATBOT_ROLES.GUEST) => {
+  if (params.__contextResolved) {
+    return params;
+  }
+
+  const nextParams = { ...params };
+  let citySource = "";
+
+  if (!nextParams.city && nextParams.selectedCity) {
+    nextParams.city = nextParams.selectedCity;
+    citySource = "chat-session";
+  }
+
+  if (!nextParams.city) {
+    const savedPreferences = readChatbotPreferences();
+    const preferredCity = safeText(savedPreferences.preferredCity || "", "");
+    if (preferredCity) {
+      nextParams.city = preferredCity;
+      nextParams.selectedCity = preferredCity;
+      citySource = "saved-preferences";
+    }
+  }
+
+  if (!nextParams.city && role !== CHATBOT_ROLES.GUEST) {
+    const profileCity = await getProfileCity();
+    if (profileCity) {
+      nextParams.city = profileCity;
+      nextParams.selectedCity = profileCity;
+      captureChatbotPreferencesFromParams({ city: profileCity });
+      citySource = "user-profile";
+    }
+  }
+
+  if (!nextParams.city && shouldResolveCurrentCity(nextParams)) {
+    try {
+      const detectedCity = await inferCityFromBrowserLocation();
+      if (detectedCity) {
+        nextParams.city = detectedCity;
+        nextParams.selectedCity = detectedCity;
+        captureChatbotPreferencesFromParams({ city: detectedCity });
+        citySource = "browser-location";
+      }
+    } catch (error) {
+      // Ignore browser location failures and fall back to asking for a city.
+    }
+  }
+
+  if (nextParams.city) {
+    nextParams.city = safeText(nextParams.city, "");
+    nextParams.selectedCity = nextParams.selectedCity || nextParams.city;
+  }
+
+  if (!nextParams.selectedCity && nextParams.city) {
+    nextParams.selectedCity = nextParams.city;
+  }
+
+  debugChatbot("context.city", {
+    rawInput: nextParams.rawInput || "",
+    city: nextParams.city || "",
+    source: citySource || "manual-or-missing"
+  });
+
+  return markResolvedContext(nextParams);
+};
+
+const fetchDriveCatalog = async () => {
+  const response = await publicAPI.getDrives({ page: 0, size: 200 });
+  const payload = unwrapApiData(response) || {};
+  const drives = ensureArray(payload, ["drives", "content"]);
+  return drives;
+};
+
+const matchesDriveFilters = (drive, params = {}) => {
+  const normalizedCity = normalizeCityValue(params.city);
+  const driveCity = normalizeCityValue(drive.centerCity || drive.center?.city || "");
+  const driveVaccine = normalizeLookupText(drive.vaccineType || "");
+  const driveDate = String(drive.driveDate || drive.date || "").slice(0, 10);
+  const driveAvailableSlots = Number(drive.availableSlots ?? drive.totalSlots ?? 0);
+  const driveStartTime = normalizeLookupText(drive.startTime || "");
+
+  if (normalizedCity && !(driveCity.includes(normalizedCity) || normalizedCity.includes(driveCity))) {
+    return false;
+  }
+
+  if (params.date && driveDate !== params.date) {
+    return false;
+  }
+
+  if (params.vaccineType && driveVaccine !== normalizeLookupText(params.vaccineType)) {
+    return false;
+  }
+
+  if (params.availableOnly && driveAvailableSlots <= 0) {
+    return false;
+  }
+
+  if (params.slot) {
+    const slotWindow = normalizeLookupText(params.slot);
+    if (slotWindow === "morning" && !(driveStartTime >= "05:00" && driveStartTime < "12:00")) {
+      return false;
+    }
+    if (slotWindow === "afternoon" && !(driveStartTime >= "12:00" && driveStartTime < "17:00")) {
+      return false;
+    }
+    if (slotWindow === "evening" && driveStartTime < "17:00") {
+      return false;
+    }
+  }
+
+  return true;
+};
+
+const getSuggestedCitiesFromDrives = (drives = []) =>
+  [...new Set(
+    drives
+      .map((drive) => safeText(drive.centerCity || drive.center?.city || "", ""))
+      .filter(Boolean)
+  )]
+    .sort((left, right) => left.localeCompare(right))
+    .slice(0, 4);
+
+const getSuggestedCitiesFromCenters = (centers = []) =>
+  [...new Set(
+    centers
+      .map((center) => safeText(center.city || center.centerCity || "", ""))
+      .filter(Boolean)
+  )]
+    .sort((left, right) => left.localeCompare(right))
+    .slice(0, 4);
+
+const getClosestMatchingCity = async (city, fallbackCities = []) => {
+  const normalizedCity = normalizeCityValue(city);
+  if (!normalizedCity) {
+    return "";
+  }
+
+  const localMatch = fallbackCities.find((candidate) => {
+    const normalizedCandidate = normalizeCityValue(candidate);
+    return normalizedCandidate.includes(normalizedCity) || normalizedCity.includes(normalizedCandidate);
+  });
+  if (localMatch) {
+    return localMatch;
+  }
+
+  try {
+    const response = await publicAPI.getCitySuggestions(city, 4);
+    const payload = unwrapApiData(response) || {};
+    const suggestions = ensureArray(payload, ["cities", "suggestions", "data"]);
+    const exactSuggestion = suggestions.find((item) => {
+      const candidate = typeof item === "string" ? item : item?.name || item?.city || "";
+      const normalizedCandidate = normalizeCityValue(candidate);
+      return normalizedCandidate.includes(normalizedCity) || normalizedCity.includes(normalizedCandidate);
+    });
+    return typeof exactSuggestion === "string"
+      ? exactSuggestion
+      : exactSuggestion?.name || exactSuggestion?.city || "";
+  } catch (error) {
+    return "";
+  }
+};
+
 const handleCenters = async (params, role, pageContext) => {
+  const resolvedParams = await withResolvedContext(params, role);
   let centers = [];
   let replyText = "";
   let route = "/centers";
 
-  if (params.wantsNearby) {
-    try {
-      const position = await getCurrentPosition();
-      const response = await publicAPI.getNearbyCenters({
-        latitude: position.coords.latitude,
-        longitude: position.coords.longitude,
-        lat: position.coords.latitude,
-        lng: position.coords.longitude,
-        page: 0,
-        size: 5
+  if (!resolvedParams.city) {
+    return buildReply({
+      text: "Which city should I search in?",
+      suggestions: [
+        { label: "Delhi", kind: "repeat", prompt: "find centers in Delhi" },
+        { label: "Mumbai", kind: "repeat", prompt: "find centers in Mumbai" },
+        { label: "Bengaluru", kind: "repeat", prompt: "find centers in Bengaluru" }
+      ],
+      state: createState(CHATBOT_INTENTS.FIND_CENTER, resolvedParams, "city", "Which city should I search in?")
+    });
+  }
+
+  debugChatbot("centers.intent", {
+    intent: resolvedParams.wantsNearby ? "FIND_NEARBY_CENTER" : "FIND_CENTER",
+    city: resolvedParams.city
+  });
+  const response = await publicAPI.getCenters({ city: resolvedParams.city, page: 0, size: 50 });
+  centers = ensureArray(unwrapApiData(response), ["content", "centers"]).slice(0, 5);
+  debugChatbot("centers.api", {
+    endpoint: "/public/centers",
+    city: resolvedParams.city,
+    resultsBeforeFilter: centers.length,
+    resultsAfterFilter: centers.length
+  });
+
+  let effectiveCity = resolvedParams.city;
+  if (!centers.length) {
+    const suggestedCity = await getClosestMatchingCity(resolvedParams.city);
+    if (suggestedCity && normalizeCityValue(suggestedCity) !== normalizeCityValue(resolvedParams.city)) {
+      const retryResponse = await publicAPI.getCenters({ city: suggestedCity, page: 0, size: 50 });
+      const retriedCenters = ensureArray(unwrapApiData(retryResponse), ["content", "centers"]).slice(0, 5);
+      debugChatbot("centers.retry", {
+        endpoint: "/public/centers",
+        requestedCity: resolvedParams.city,
+        suggestedCity,
+        resultsAfterRetry: retriedCenters.length
       });
-      centers = ensureArray(unwrapApiData(response), ["content", "centers"]).slice(0, 5);
-      replyText = centers.length ? "Here are the nearby centers I found." : "I could not find nearby centers right now.";
-    } catch (error) {
-      if (!params.city) {
-        return buildReply({
-          text: "I can search nearby centers if location is allowed, or you can tell me a city.",
-          suggestions: [
-            { label: "Use Delhi", kind: "repeat", prompt: "find centers in Delhi" },
-            { label: "Use Mumbai", kind: "repeat", prompt: "find centers in Mumbai" }
-          ],
-          state: createState(CHATBOT_INTENTS.FIND_CENTER, params, "city", "Which city should I search?")
-        });
+      if (retriedCenters.length) {
+        centers = retriedCenters;
+        effectiveCity = suggestedCity;
       }
     }
   }
 
-  if (!centers.length) {
-    if (!params.city) {
-      return buildReply({
-        text: "Which city should I search for vaccination centers?",
-        suggestions: [
-          { label: "Delhi", kind: "repeat", prompt: "find centers in Delhi" },
-          { label: "Mumbai", kind: "repeat", prompt: "find centers in Mumbai" },
-          { label: "Nearby", kind: "repeat", prompt: "find nearby center" }
-        ],
-        state: createState(CHATBOT_INTENTS.FIND_CENTER, params, "city", "Which city should I search?")
-      });
-    }
-
-    const response = await publicAPI.getCenters({ city: params.city, page: 0, size: 5 });
-    centers = ensureArray(unwrapApiData(response), ["content", "centers"]).slice(0, 5);
-    route = `/centers?city=${encodeURIComponent(params.city)}`;
-    replyText = centers.length
-      ? `I found ${centers.length} center${centers.length === 1 ? "" : "s"} in ${params.city}.`
-      : `No centers found for ${params.city}.`;
-  }
+  route = `/centers?city=${encodeURIComponent(effectiveCity)}`;
+  replyText = centers.length
+    ? resolvedParams.wantsNearby
+      ? `Here are nearby centers in ${effectiveCity}.`
+      : `I found ${centers.length} center${centers.length === 1 ? "" : "s"} in ${effectiveCity}.`
+    : `I couldn't find centers in ${resolvedParams.city}. You can show all centers, try another city, or check nearby options.`;
 
   return buildReply({
     text: replyText,
     cards: centers.map((center) => buildCenterCard(center, route)),
     actions: centers.length ? [buildNavigateAction("Open centers", route)] : [],
-    suggestions: buildFilterSuggestions("find centers", params),
-    state: createState(CHATBOT_INTENTS.FIND_CENTER, params)
+    suggestions: centers.length
+      ? buildFilterSuggestions("find centers", resolvedParams)
+      : [
+        { label: "Show all centers", kind: "navigate", to: "/centers" },
+        { label: "Search another city", kind: "repeat", prompt: "show centers in Delhi" },
+        { label: "Find nearby centers", kind: "repeat", prompt: "nearby center dikhao" }
+      ],
+    state: createState(CHATBOT_INTENTS.FIND_CENTER, resolvedParams)
   });
 };
 
 const handleDrives = async (params, role, pageContext, bookingMode = false) => {
+  const resolvedParams = await withResolvedContext(params, role);
   const query = new URLSearchParams();
-  if (params.city) {
-    query.set("city", params.city);
+  if (resolvedParams.city) {
+    query.set("city", resolvedParams.city);
   }
-  if (params.date) {
-    query.set("date", params.date);
+  if (resolvedParams.date) {
+    query.set("date", resolvedParams.date);
   }
   const route = query.toString() ? `/drives?${query.toString()}` : "/drives";
 
-  const response = await publicAPI.getDrives({
-    city: params.city || undefined,
-    date: params.date || undefined,
-    available: params.availableOnly || undefined,
-    page: 0,
-    size: 5
+  debugChatbot("drives.intent", {
+    intent: bookingMode ? "BOOK_SLOT" : "SEARCH_DRIVES",
+    city: resolvedParams.city || "",
+    rawInput: resolvedParams.rawInput || "",
+    date: resolvedParams.date || "",
+    availableOnly: Boolean(resolvedParams.availableOnly)
   });
-  const drives = ensureArray(unwrapApiData(response), ["content", "drives"]).slice(0, 5);
+
+  const allDrives = await fetchDriveCatalog();
+  const filteredDrives = allDrives.filter((drive) => matchesDriveFilters(drive, resolvedParams));
+  const drives = filteredDrives.slice(0, 5);
+
+  debugChatbot("drives.api", {
+    endpoint: "/public/drives?page=0&size=200",
+    detectedCity: resolvedParams.city || "",
+    resultsBeforeFilter: allDrives.length,
+    resultsAfterFilter: filteredDrives.length
+  });
 
   if (!drives.length) {
+    const suggestedCities = getSuggestedCitiesFromDrives(allDrives);
+    const correctedCity = resolvedParams.city
+      ? await getClosestMatchingCity(resolvedParams.city, suggestedCities)
+      : "";
+
+    if (correctedCity && normalizeCityValue(correctedCity) !== normalizeCityValue(resolvedParams.city || "")) {
+      const correctedParams = {
+        ...resolvedParams,
+        city: titleCaseText(correctedCity),
+        selectedCity: titleCaseText(correctedCity)
+      };
+      const correctedDrives = allDrives.filter((drive) => matchesDriveFilters(drive, correctedParams)).slice(0, 5);
+      debugChatbot("drives.retry", {
+        requestedCity: resolvedParams.city || "",
+        suggestedCity: correctedCity,
+        resultsAfterRetry: correctedDrives.length
+      });
+      if (correctedDrives.length) {
+        return buildReply({
+          text: `I couldn't match "${resolvedParams.city}", but I found active drives in ${titleCaseText(correctedCity)}.`,
+          cards: correctedDrives.map((drive) => buildDriveCard(drive, `/drives?city=${encodeURIComponent(correctedParams.city)}`, bookingMode)),
+          actions: [buildNavigateAction(bookingMode ? "Open booking page" : "Open drives", `/drives?city=${encodeURIComponent(correctedParams.city)}`)],
+          suggestions: buildFilterSuggestions("show active drives", correctedParams),
+          state: createState(bookingMode ? CHATBOT_INTENTS.BOOK_SLOT : CHATBOT_INTENTS.SEARCH_DRIVES, correctedParams)
+        });
+      }
+    }
+
     return buildReply({
-      text: "No matching drives are available right now.",
+      text: resolvedParams.city
+        ? `I couldn't find active drives in ${resolvedParams.city} with the current filters.`
+        : "I couldn't match drives with the current filters.",
       actions: [buildNavigateAction("Open drives", route)],
-      suggestions: buildFilterSuggestions("show active drives", params)
+      suggestions: suggestedCities.length
+        ? [
+          ...buildLocationAwareSuggestions(resolvedParams),
+          ...suggestedCities.map((city) => ({ label: city, kind: "repeat", prompt: `find drives in ${city}` }))
+        ].slice(0, 4)
+        : buildDriveQuerySuggestions(resolvedParams, role)
     });
   }
 
   return buildReply({
-    text: bookingMode ? "Here are the best drive options for booking." : "Here are the matching drives.",
+    text: bookingMode
+      ? `Here are the best drive options${resolvedParams.city ? ` in ${resolvedParams.city}` : ""}.`
+      : `Here are the matching drives${resolvedParams.city ? ` in ${resolvedParams.city}` : ""}.`,
     cards: drives.map((drive) => buildDriveCard(drive, route, bookingMode)),
     actions: [buildNavigateAction(bookingMode ? "Open booking page" : "Open drives", route)],
-    suggestions: buildFilterSuggestions("show active drives", params),
-    state: createState(bookingMode ? CHATBOT_INTENTS.BOOK_SLOT : CHATBOT_INTENTS.SEARCH_DRIVES, params)
+    suggestions: buildFilterSuggestions("show active drives", resolvedParams),
+    state: createState(bookingMode ? CHATBOT_INTENTS.BOOK_SLOT : CHATBOT_INTENTS.SEARCH_DRIVES, resolvedParams)
   });
 };
 
@@ -758,19 +1094,20 @@ const handleSlotRecommendations = async (params) => {
 };
 
 const handleBookSlot = async (params, role) => {
+  const resolvedParams = await withResolvedContext(params, role);
   if (role === CHATBOT_ROLES.GUEST) {
-    if (!params.city && !params.wantsNearby) {
+    if (!resolvedParams.city && !resolvedParams.wantsNearby) {
       return buildReply({
         text: "Tell me a city or ask for nearby centers and I will prepare booking options before sign-in.",
         suggestions: [
           { label: "Delhi", kind: "repeat", prompt: "book vaccine in Delhi" },
           { label: "Nearby", kind: "repeat", prompt: "book vaccine nearby" }
         ],
-        state: createState(CHATBOT_INTENTS.BOOK_SLOT, params, "city")
+        state: createState(CHATBOT_INTENTS.BOOK_SLOT, resolvedParams, "city")
       });
     }
 
-    const driveReply = await handleDrives(params, role, null, true);
+    const driveReply = await handleDrives(resolvedParams, role, null, true);
     return {
       ...driveReply,
       text: "Sign in to complete booking. I found matching options for you.",
@@ -781,11 +1118,23 @@ const handleBookSlot = async (params, role) => {
     };
   }
 
+  if (!resolvedParams.city && !resolvedParams.date) {
+    return buildReply({
+      text: "Which city should I search in for slots?",
+      suggestions: [
+        { label: "Delhi", kind: "repeat", prompt: "book slot in Delhi" },
+        { label: "Mumbai", kind: "repeat", prompt: "book slot in Mumbai tomorrow" },
+        { label: "Tomorrow", kind: "repeat", prompt: "book slot tomorrow" }
+      ],
+      state: createState(CHATBOT_INTENTS.BOOK_SLOT, resolvedParams, "city", "Which city should I search in?")
+    });
+  }
+
   try {
-    const slots = await handleSlotRecommendations(params);
+    const slots = await handleSlotRecommendations(resolvedParams);
     if (slots.length) {
       return buildReply({
-        text: "Here are recommended slots based on availability, date, and your preferred city.",
+        text: "Here are the best matching slots.",
         cards: slots.map((slot) => buildCard({
           ...buildSlotCard(slot),
           actions: [
@@ -794,15 +1143,436 @@ const handleBookSlot = async (params, role) => {
           ]
         })),
         actions: [buildNavigateAction("Open slot finder", "/user/bookings?tab=slots")],
-        suggestions: buildFilterSuggestions("show recommended slots", params),
-        state: createState(CHATBOT_INTENTS.BOOK_SLOT, params)
+        suggestions: buildFilterSuggestions("show recommended slots", resolvedParams),
+        state: createState(CHATBOT_INTENTS.BOOK_SLOT, resolvedParams)
       });
     }
   } catch (error) {
     // Fall back to public drive search.
   }
 
-  return handleDrives(params, role, null, true);
+  return handleDrives(resolvedParams, role, null, true);
+};
+
+const getBookingFilterMeta = (params = {}) => {
+  const filter = String(params.bookingStatusFilter || params.selectedBookingFilter || "").toUpperCase();
+
+  if (filter === "PENDING") {
+    return {
+      key: "pending",
+      statuses: ["PENDING"],
+      emptyText: "I couldn't find pending bookings for your account.",
+      successText: "Here are your pending bookings."
+    };
+  }
+  if (filter === "UPCOMING") {
+    return {
+      key: "upcoming",
+      statuses: ["CONFIRMED"],
+      emptyText: "I couldn't find upcoming bookings for your account.",
+      successText: "Here are your upcoming bookings."
+    };
+  }
+  if (filter === "COMPLETED") {
+    return {
+      key: "completed",
+      statuses: ["COMPLETED"],
+      emptyText: "I couldn't find completed bookings for your account.",
+      successText: "Here are your completed bookings."
+    };
+  }
+  if (filter === "CANCELLED") {
+    return {
+      key: "cancelled",
+      statuses: ["CANCELLED"],
+      emptyText: "I couldn't find cancelled bookings for your account.",
+      successText: "Here are your cancelled bookings."
+    };
+  }
+
+  return {
+    key: "all",
+    statuses: [],
+    emptyText: "I couldn't find bookings for your account.",
+    successText: "Here are your latest bookings."
+  };
+};
+
+const filterBookingsByStatus = (bookings = [], params = {}) => {
+  const meta = getBookingFilterMeta(params);
+  if (!meta.statuses.length) {
+    return { meta, items: bookings };
+  }
+
+  return {
+    meta,
+    items: bookings.filter((booking) => meta.statuses.includes(String(booking.status || "").toUpperCase()))
+  };
+};
+
+const sumAvailableSlots = (drives = []) =>
+  drives.reduce((total, drive) => total + Number(drive.availableSlots ?? drive.totalSlots ?? 0), 0);
+
+const buildCountSummaryCard = (id, title, metrics, route) =>
+  buildStatsCard(title, metrics.map((metric) => ({
+    label: metric.label,
+    value: String(metric.value)
+  })), route);
+
+const requireCityForCount = (intent, params, examples = []) =>
+  buildReply({
+    text: "Which city should I check?",
+    suggestions: examples.length
+      ? examples.map((prompt) => ({ label: prompt.replace(/^how many\s+/i, ""), kind: "repeat", prompt }))
+      : [
+        { label: "Delhi", kind: "repeat", prompt: "how many centers in Delhi" },
+        { label: "Ludhiana", kind: "repeat", prompt: "how many centers in Ludhiana" }
+      ],
+    state: createState(intent, params, "city", "Which city should I check?")
+  });
+
+const handleCenterCount = async (params, role) => {
+  const resolvedParams = await withResolvedContext(params, role);
+  if (!resolvedParams.city) {
+    return requireCityForCount(CHATBOT_INTENTS.CENTER_COUNT_BY_CITY, resolvedParams, [
+      "how many centers in Delhi",
+      "how many centers in Ludhiana"
+    ]);
+  }
+
+  const response = await publicAPI.getCenters({ city: resolvedParams.city, page: 0, size: 500 });
+  const centers = ensureArray(unwrapApiData(response), ["content", "centers"]);
+  debugChatbot("counts.centers", {
+    endpoint: "/public/centers",
+    city: resolvedParams.city,
+    resultsBeforeFilter: centers.length,
+    resultsAfterFilter: centers.length
+  });
+
+  const count = centers.length;
+  return buildReply({
+    text: `${resolvedParams.city} has ${count} vaccination center${count === 1 ? "" : "s"} available right now. Want me to show them?`,
+    cards: [
+      buildCountSummaryCard("count-centers", "Centers", [
+        { label: "City", value: resolvedParams.city },
+        { label: "Centers", value: count }
+      ], `/centers?city=${encodeURIComponent(resolvedParams.city)}`)
+    ],
+    actions: [buildNavigateAction("Show centers", `/centers?city=${encodeURIComponent(resolvedParams.city)}`)],
+    state: createState(CHATBOT_INTENTS.CENTER_COUNT_BY_CITY, resolvedParams)
+  });
+};
+
+const handleDriveCount = async (params, role, activeOnly = false) => {
+  const resolvedParams = await withResolvedContext(params, role);
+  const allDrives = await fetchDriveCatalog();
+  const scopedDrives = resolvedParams.city
+    ? allDrives.filter((drive) => matchesDriveFilters(drive, { ...resolvedParams, availableOnly: false }))
+    : allDrives;
+  debugChatbot("counts.drives", {
+    endpoint: "/public/drives?page=0&size=200",
+    city: resolvedParams.city || "",
+    activeOnly,
+    resultsBeforeFilter: allDrives.length,
+    resultsAfterFilter: scopedDrives.length
+  });
+
+  const count = scopedDrives.length;
+  const route = resolvedParams.city ? `/drives?city=${encodeURIComponent(resolvedParams.city)}` : "/drives";
+  const text = resolvedParams.city
+    ? `${resolvedParams.city} has ${count} active drive${count === 1 ? "" : "s"} right now. Want me to show them?`
+    : `There are ${count} active drives right now. Want me to show them?`;
+
+  return buildReply({
+    text,
+    cards: [
+      buildCountSummaryCard("count-drives", "Active Drives", [
+        { label: resolvedParams.city ? "City" : "Scope", value: resolvedParams.city || "All cities" },
+        { label: "Drives", value: count },
+        { label: "Available slots", value: sumAvailableSlots(scopedDrives) }
+      ], route)
+    ],
+    actions: [buildNavigateAction("Show drives", route)],
+    state: createState(activeOnly ? CHATBOT_INTENTS.ACTIVE_DRIVE_COUNT : CHATBOT_INTENTS.DRIVE_COUNT_BY_CITY, resolvedParams)
+  });
+};
+
+const handleSlotCount = async (params, role) => {
+  const resolvedParams = await withResolvedContext(params, role);
+  if (!resolvedParams.city) {
+    return requireCityForCount(CHATBOT_INTENTS.SLOT_COUNT_BY_CITY, resolvedParams, [
+      "available slots in Delhi",
+      "available slots in Ludhiana"
+    ]);
+  }
+
+  const allDrives = await fetchDriveCatalog();
+  const cityDrives = allDrives.filter((drive) => matchesDriveFilters(drive, { ...resolvedParams, availableOnly: false }));
+  const availableSlots = sumAvailableSlots(cityDrives);
+  debugChatbot("counts.slots", {
+    endpoint: "/public/drives?page=0&size=200",
+    city: resolvedParams.city,
+    resultsBeforeFilter: allDrives.length,
+    resultsAfterFilter: cityDrives.length
+  });
+
+  return buildReply({
+    text: `${resolvedParams.city} currently has ${availableSlots} available slot${availableSlots === 1 ? "" : "s"} across ${cityDrives.length} active drive${cityDrives.length === 1 ? "" : "s"}.`,
+    cards: [
+      buildCountSummaryCard("count-slots", "Available Slots", [
+        { label: "City", value: resolvedParams.city },
+        { label: "Active drives", value: cityDrives.length },
+        { label: "Available slots", value: availableSlots }
+      ], `/drives?city=${encodeURIComponent(resolvedParams.city)}`)
+    ],
+    actions: [buildNavigateAction("Show drives", `/drives?city=${encodeURIComponent(resolvedParams.city)}`)],
+    suggestions: [
+      { label: "Show all active drives", kind: "repeat", prompt: "show all active drives" },
+      { label: "Change city", kind: "repeat", prompt: "available slots in Delhi" },
+      { label: "Nearby centers", kind: "repeat", prompt: "nearby center dikhao" }
+    ],
+    state: createState(CHATBOT_INTENTS.SLOT_COUNT_BY_CITY, resolvedParams)
+  });
+};
+
+const handleMyBookingCount = async (params) => {
+  const response = await userAPI.getBookings();
+  const bookings = ensureArray(unwrapApiData(response));
+  const breakdown = {
+    pending: bookings.filter((item) => String(item.status || "").toUpperCase() === "PENDING").length,
+    upcoming: bookings.filter((item) => String(item.status || "").toUpperCase() === "CONFIRMED").length,
+    completed: bookings.filter((item) => String(item.status || "").toUpperCase() === "COMPLETED").length,
+    cancelled: bookings.filter((item) => String(item.status || "").toUpperCase() === "CANCELLED").length
+  };
+
+  debugChatbot("counts.myBookings", {
+    endpoint: "/user/bookings",
+    resultsBeforeFilter: bookings.length,
+    resultsAfterFilter: bookings.length
+  });
+
+  return buildReply({
+    text: `You currently have ${bookings.length} booking${bookings.length === 1 ? "" : "s"}: ${breakdown.pending} pending, ${breakdown.upcoming} upcoming, ${breakdown.completed} completed, and ${breakdown.cancelled} cancelled.`,
+    cards: [
+      buildCountSummaryCard("count-my-bookings", "My Bookings", [
+        { label: "Total", value: bookings.length },
+        { label: "Pending", value: breakdown.pending },
+        { label: "Upcoming", value: breakdown.upcoming },
+        { label: "Completed", value: breakdown.completed }
+      ], "/user/bookings?tab=bookings")
+    ],
+    actions: [buildNavigateAction("View bookings", "/user/bookings?tab=bookings")],
+    state: createState(CHATBOT_INTENTS.MY_BOOKING_COUNT, params)
+  });
+};
+
+const handleMyCertificateCount = async (params, role) => {
+  const isAdminRole = [CHATBOT_ROLES.ADMIN, CHATBOT_ROLES.SUPER_ADMIN].includes(role);
+  const response = isAdminRole ? await adminAPI.getCertificates({ page: 0, size: 100 }) : await certificateAPI.getMyCertificates();
+  const certificates = ensureArray(unwrapApiData(response), ["content", "certificates"]);
+  debugChatbot("counts.certificates", {
+    endpoint: isAdminRole ? "/admin/certificates" : "/certificates/my-certificates",
+    resultsBeforeFilter: certificates.length,
+    resultsAfterFilter: certificates.length
+  });
+
+  return buildReply({
+    text: isAdminRole
+      ? `There are ${certificates.length} certificates in your current admin scope.`
+      : `You currently have ${certificates.length} certificate${certificates.length === 1 ? "" : "s"}.`,
+    cards: [
+      buildCountSummaryCard("count-certificates", isAdminRole ? "Certificates" : "My Certificates", [
+        { label: "Scope", value: isAdminRole ? "Admin" : "My account" },
+        { label: "Certificates", value: certificates.length }
+      ], isAdminRole ? "/admin/certificates" : "/certificates")
+    ],
+    actions: [buildNavigateAction("Open certificates", isAdminRole ? "/admin/certificates" : "/certificates")],
+    state: createState(CHATBOT_INTENTS.MY_CERTIFICATE_COUNT, params)
+  });
+};
+
+const handleUserDashboardSummary = async (params, role) => {
+  const resolvedParams = await withResolvedContext(params, role);
+  const [summaryRes, bookingsRes, certificatesRes] = await Promise.all([
+    publicAPI.getSummary(),
+    userAPI.getBookings(),
+    certificateAPI.getMyCertificates()
+  ]);
+  const summary = unwrapApiData(summaryRes) || {};
+  const bookings = ensureArray(unwrapApiData(bookingsRes));
+  const certificates = ensureArray(unwrapApiData(certificatesRes));
+
+  return buildReply({
+    text: `Here’s your VaxZone summary: ${summary.activeDrives || summary.drivesCount || 0} active drives, ${summary.availableSlots || 0} available slots, ${bookings.length} bookings, and ${certificates.length} certificates.`,
+    cards: [
+      buildCountSummaryCard("user-summary", "My Summary", [
+        { label: "Centers", value: summary.totalCenters || summary.centersCount || 0 },
+        { label: "Active Drives", value: summary.activeDrives || summary.drivesCount || 0 },
+        { label: "Available Slots", value: summary.availableSlots || 0 },
+        { label: "My Bookings", value: bookings.length },
+        { label: "Certificates", value: certificates.length }
+      ], "/user/bookings")
+    ],
+    actions: [buildNavigateAction("Open dashboard", "/user/bookings")],
+    state: createState(CHATBOT_INTENTS.USER_DASHBOARD_SUMMARY, resolvedParams)
+  });
+};
+
+const handleAdminSummary = async (role) => {
+  const [statsRes, adminsRes] = await Promise.allSettled([
+    adminAPI.getDashboardStats(),
+    role === CHATBOT_ROLES.SUPER_ADMIN ? superAdminAPI.getAdmins() : Promise.resolve({ data: { data: [] } })
+  ]);
+  const stats = unwrapApiData(statsRes.status === "fulfilled" ? statsRes.value : {}) || {};
+  const admins = ensureArray(unwrapApiData(adminsRes.status === "fulfilled" ? adminsRes.value : []));
+
+  return buildReply({
+    text: role === CHATBOT_ROLES.SUPER_ADMIN
+      ? `System summary: ${stats.activeDrives || 0} active drives, ${stats.availableSlots || 0} available slots, ${stats.totalUsers || 0} users, and ${admins.length} admin accounts.`
+      : `Admin summary: ${stats.pendingBookings || 0} pending bookings, ${stats.activeDrives || 0} active drives, and ${stats.availableSlots || 0} available slots.`,
+    cards: [
+      buildCountSummaryCard(role === CHATBOT_ROLES.SUPER_ADMIN ? "super-summary" : "admin-summary", role === CHATBOT_ROLES.SUPER_ADMIN ? "System Summary" : "Admin Summary", [
+        { label: "Pending Bookings", value: stats.pendingBookings || 0 },
+        { label: "Active Drives", value: stats.activeDrives || 0 },
+        { label: "Available Slots", value: stats.availableSlots || 0 },
+        { label: "Users", value: stats.totalUsers || 0 },
+        ...(role === CHATBOT_ROLES.SUPER_ADMIN ? [{ label: "Admins", value: admins.length }] : [])
+      ], "/admin/dashboard")
+    ],
+    actions: [buildNavigateAction("Open dashboard", "/admin/dashboard")],
+    state: createState(role === CHATBOT_ROLES.SUPER_ADMIN ? CHATBOT_INTENTS.SUPER_ADMIN_SUMMARY : CHATBOT_INTENTS.ADMIN_DASHBOARD_SUMMARY, {})
+  });
+};
+
+const HEALTH_KNOWLEDGE_ARTICLES = [
+  {
+    match: /booster/,
+    title: "Booster dose",
+    lines: [
+      "A booster dose helps refresh protection after earlier doses.",
+      "It is commonly recommended for people whose immunity may have reduced over time.",
+      "Eligibility depends on age, health status, and local guidance."
+    ]
+  },
+  {
+    match: /side effects/,
+    title: "Vaccine side effects",
+    lines: [
+      "Common side effects can include mild fever, body ache, tiredness, or pain at the injection site.",
+      "These are usually short-lived and improve within a few days.",
+      "Seek medical help if symptoms feel severe or unusual."
+    ]
+  },
+  {
+    match: /safe/,
+    title: "Vaccine safety",
+    lines: [
+      "Vaccines are generally considered safe when used according to approved guidance.",
+      "Mild side effects are common, but serious reactions are uncommon.",
+      "People with specific medical concerns should speak with a doctor first."
+    ]
+  },
+  {
+    match: /who should take/,
+    title: "Who should take the vaccine",
+    lines: [
+      "Eligibility depends on age, medical condition, and current public health guidance.",
+      "People in higher-risk groups are often prioritized for vaccination and boosters.",
+      "Check official guidance for current eligibility in your area."
+    ]
+  },
+  {
+    match: /covid|vaccine/,
+    title: "COVID-19 vaccine",
+    lines: [
+      "A COVID-19 vaccine helps the body build protection against severe illness from the virus.",
+      "Different vaccines may use different technologies, but the goal is the same: immune protection.",
+      "Booster recommendations can vary over time."
+    ]
+  }
+];
+
+const handleHealthKnowledge = async (params, role, pageContext) => {
+  const article = HEALTH_KNOWLEDGE_ARTICLES.find((item) => item.match.test(params.normalizedInput || "")) || HEALTH_KNOWLEDGE_ARTICLES[HEALTH_KNOWLEDGE_ARTICLES.length - 1];
+  return buildReply({
+    text: `${article.title}: ${article.lines[0]} For medical advice, please consult a doctor or official health source.`,
+    cards: [
+      buildCard({
+        id: `knowledge-${article.title.toLowerCase().replace(/\s+/g, "-")}`,
+        eyebrow: "Vaccine awareness",
+        title: article.title,
+        subtitle: "General information",
+        lines: article.lines.slice(0, 3).map((line, index) => ({ label: index === 0 ? "About" : "Note", value: line })),
+        actions: [buildNavigateAction("Find centers", "/centers")],
+        type: "record"
+      })
+    ],
+    suggestions: [
+      { label: "Vaccine awareness", kind: "repeat", prompt: "tell me about covid vaccine" },
+      { label: "View latest news", kind: "repeat", prompt: "show government vaccine news" },
+      { label: "Find centers", kind: "repeat", prompt: "find centers in Delhi" }
+    ],
+    state: createState(CHATBOT_INTENTS.HEALTH_KNOWLEDGE, params)
+  });
+};
+
+const NEWS_KEYWORDS = ["covid", "virus", "vaccine", "government", "scheme", "health alert", "booster"];
+
+const handleNewsKnowledge = async (params, role, pageContext) => {
+  const response = await newsAPI.getAllNews(0, 20);
+  const rawNews = unwrapApiData(response) || [];
+  const newsItems = Array.isArray(rawNews) ? rawNews : ensureArray(rawNews, ["content"]);
+  const normalizedInput = normalizeLookupText(params.rawInput || params.normalizedInput || "");
+  const matchedNews = newsItems.filter((item) => {
+    const haystack = normalizeLookupText(`${item.title || ""} ${item.content || ""} ${item.category || ""}`);
+    return NEWS_KEYWORDS.some((keyword) => normalizedInput.includes(keyword) && haystack.includes(keyword));
+  }).slice(0, 3);
+
+  debugChatbot("knowledge.news", {
+    endpoint: "/public/news",
+    query: params.rawInput || "",
+    resultsBeforeFilter: newsItems.length,
+    resultsAfterFilter: matchedNews.length
+  });
+
+  if (!matchedNews.length) {
+    const asksLatest = /\blatest|new\b/.test(normalizedInput);
+    return buildReply({
+      text: asksLatest
+        ? "I don’t have a live health news feed connected right now, but I can show VaxZone news or explain general information."
+        : "I can explain general information, but for latest updates please check official government or health department sources.",
+      suggestions: [
+        { label: "View latest news", kind: "navigate", to: "/news" },
+        { label: "Government updates", kind: "repeat", prompt: "show government vaccine news" },
+        { label: "Vaccine awareness", kind: "repeat", prompt: "tell me about covid vaccine" },
+        { label: "Find centers", kind: "repeat", prompt: "find centers in Delhi" }
+      ],
+      state: createState(CHATBOT_INTENTS.NEWS_KNOWLEDGE, params)
+    });
+  }
+
+  return buildReply({
+    text: `I found ${matchedNews.length} VaxZone news update${matchedNews.length === 1 ? "" : "s"} related to that topic.`,
+    cards: matchedNews.map((item) => buildCard({
+      id: `news-knowledge-${item.id}`,
+      eyebrow: "News",
+      title: safeText(item.title, "VaxZone update"),
+      subtitle: safeText(item.category, "Project news"),
+      lines: [
+        { label: "Summary", value: safeText(item.content, "Open the news page for more details.") },
+        { label: "Published", value: formatDateTime(item.publishedAt || item.updatedAt || item.createdAt) }
+      ],
+      actions: [buildNavigateAction("Open news", "/news")],
+      type: "news"
+    })),
+    actions: [buildNavigateAction("View latest news", "/news")],
+    suggestions: [
+      { label: "Government updates", kind: "repeat", prompt: "show government vaccine news" },
+      { label: "Vaccine awareness", kind: "repeat", prompt: "what is covid 19 vaccine" },
+      { label: "Find centers", kind: "repeat", prompt: "find centers in Delhi" }
+    ],
+    state: createState(CHATBOT_INTENTS.NEWS_KNOWLEDGE, params)
+  });
 };
 
 const handleSystemHealth = async () => {
@@ -1015,12 +1785,24 @@ const handleAdminPendingWork = async () => {
 
 const handleSmartSearch = async (params, role, pageContext) => {
   const query = params.rawInput || params.normalizedInput || "";
+  debugChatbot("smart-search.intent", {
+    intent: "SMART_SEARCH",
+    city: params.city || "",
+    rawInput: query
+  });
   const response = await publicAPI.smartSearch({ query, city: params.city || undefined, limit: 6 });
   const payload = unwrapApiData(response) || {};
   const centers = ensureArray(payload.centers || payload.centerResults || []);
   const drives = ensureArray(payload.drives || payload.driveResults || []);
   const suggestions = ensureArray(payload.suggestions || payload.corrections || []);
   const correctedCity = suggestions[0] || "";
+
+  debugChatbot("smart-search.api", {
+    endpoint: "/public/search",
+    detectedCity: params.city || "",
+    resultsBeforeFilter: centers.length + drives.length,
+    resultsAfterFilter: centers.length + drives.length
+  });
 
   if (!centers.length && !drives.length) {
     return buildEmptyStateReply(
@@ -1810,40 +2592,62 @@ const handleNews = async () => {
   });
 };
 
-const handleMyBookings = async (params, role) => {
+const handleMyBookings = async (params, role, pageContext) => {
   const response = await userAPI.getBookings();
   const allBookings = ensureArray(unwrapApiData(response));
-  const filteredBookings = params.analyticsMetric === "pendingBookings"
-    ? allBookings.filter((booking) => ["PENDING", "CONFIRMED"].includes(String(booking.status || "").toUpperCase()))
-    : params.analyticsMetric === "completedBookings"
-      ? allBookings.filter((booking) => String(booking.status || "").toUpperCase() === "COMPLETED")
-      : allBookings;
-  const bookings = filteredBookings.slice(0, 5);
+  const normalizedParams = {
+    ...params,
+    bookingStatusFilter: params.bookingStatusFilter
+      || (params.analyticsMetric === "pendingBookings" ? "PENDING" : "")
+      || (params.analyticsMetric === "completedBookings" ? "COMPLETED" : "")
+  };
+  const { meta, items } = filterBookingsByStatus(allBookings, normalizedParams);
+  const bookings = items.slice(0, 5);
   const route = "/user/bookings?tab=bookings";
+
+  debugChatbot("bookings.api", {
+    endpoint: "/user/bookings",
+    filter: meta.key,
+    route: pageContext?.pathname || route,
+    resultsBeforeFilter: allBookings.length,
+    resultsAfterFilter: items.length
+  });
 
   if (!bookings.length) {
     return buildReply({
-      text: "You don't have any matching bookings right now.",
-      actions: [buildNavigateAction("Open bookings", route)]
+      text: meta.emptyText,
+      actions: [buildNavigateAction("View all bookings", route)],
+      suggestions: [
+        { label: "Book slot", kind: "repeat", prompt: "book slot tomorrow" },
+        { label: "View all bookings", kind: "navigate", to: route },
+        { label: "Find slots", kind: "repeat", prompt: "find slots tomorrow" }
+      ],
+      state: createState(CHATBOT_INTENTS.USER_BOOKINGS_FILTER, normalizedParams)
     });
   }
 
   return buildReply({
-    text: params.analyticsMetric === "pendingBookings"
-      ? "Here are your pending bookings."
-      : params.analyticsMetric === "completedBookings"
-        ? "Here are your completed bookings."
-        : "Here are your latest bookings.",
+    text: meta.successText,
     cards: bookings.map((booking) => buildBookingCard(booking, route, role)),
     actions: [buildNavigateAction("Open my bookings", route)],
-    state: createState(CHATBOT_INTENTS.VIEW_MY_BOOKINGS, params)
+    suggestions: buildSuggestions(role, pageContext, 4),
+    state: createState(CHATBOT_INTENTS.USER_BOOKINGS_FILTER, normalizedParams)
   });
 };
 
 const handleBookingActionChoice = async (intent, params) => {
   const response = await userAPI.getBookings();
-  const bookings = ensureArray(unwrapApiData(response))
+  const allBookings = ensureArray(unwrapApiData(response));
+  const bookings = allBookings
     .filter((booking) => ["PENDING", "CONFIRMED"].includes(String(booking.status || "").toUpperCase()));
+
+  debugChatbot("bookings.action", {
+    endpoint: "/user/bookings",
+    intent,
+    requestedBookingId: params.bookingId || "",
+    resultsBeforeFilter: allBookings.length,
+    resultsAfterFilter: bookings.length
+  });
 
   if (!bookings.length) {
     return buildReply({
@@ -1860,8 +2664,8 @@ const handleBookingActionChoice = async (intent, params) => {
         : `/user/bookings?tab=slots&action=reschedule&bookingId=${encodeURIComponent(selected.id)}`;
       return buildReply({
         text: intent === CHATBOT_INTENTS.CANCEL_BOOKING
-          ? `I opened booking #${selected.id}. Click "Yes, cancel" to confirm.`
-          : `I opened booking #${selected.id}. Choose a new slot to finish rescheduling.`,
+          ? `Booking #${selected.id} is ready to cancel. Please confirm it on the bookings page.`
+          : `Booking #${selected.id} is ready to reschedule. Choose a new slot on the next page.`,
         actions: [buildNavigateAction("Open booking", route)],
         state: createState(intent, { ...params, bookingId: selected.id })
       });
@@ -2373,11 +3177,23 @@ export const executeChatbotAction = async ({
   pageContext
 }) => {
   const effectiveRole = normalizeChatbotRole(role, isAuthenticated);
-  const forcedIntent = conversationState?.pendingIntent || "";
+  const forcedIntent = conversationState?.pendingParam || conversationState?.pendingQuestion || conversationState?.params?.flowType
+    ? (conversationState?.pendingIntent || "")
+    : "";
   const parsed = parseChatbotIntent(prompt, { intent: forcedIntent, pageContext });
   const params = hydrateChatbotParamsWithPreferences(mergeConversationParams(conversationState, parsed, pageContext));
   const intent = forcedIntent || parsed.resolvedIntent || parsed.intent;
   const registryEntry = CHATBOT_ACTION_REGISTRY[intent] || CHATBOT_ACTION_REGISTRY[CHATBOT_INTENTS.HELP];
+
+  debugChatbot("message.parse", {
+    prompt,
+    intent,
+    resolvedIntent: parsed.resolvedIntent,
+    city: params.city || "",
+    role: effectiveRole,
+    route: pageContext?.pathname || "",
+    page: pageContext?.label || ""
+  });
 
   captureChatbotPreferencesFromParams(params);
   pushChatbotRecentAction({
@@ -2402,6 +3218,10 @@ export const executeChatbotAction = async ({
     return buildPermissionReply(effectiveRole, pageContext);
   }
 
+  if ([CHATBOT_INTENTS.GREETING, CHATBOT_INTENTS.THANKS, CHATBOT_INTENTS.GOODBYE, CHATBOT_INTENTS.ACKNOWLEDGEMENT].includes(intent)) {
+    return buildSmallTalkReply(intent, effectiveRole, pageContext);
+  }
+
   const missingParam = getMissingChatbotParam(registryEntry.requiredParams, params);
   if (missingParam && !isGuidedIntent(intent)) {
     return buildReply({
@@ -2415,9 +3235,27 @@ export const executeChatbotAction = async ({
     case CHATBOT_INTENTS.FIND_CENTER:
     case CHATBOT_INTENTS.FIND_NEARBY_CENTER:
       return handleCenters(params, effectiveRole, pageContext);
+    case CHATBOT_INTENTS.CENTER_COUNT_BY_CITY:
+      return handleCenterCount(params, effectiveRole);
     case CHATBOT_INTENTS.SEARCH_DRIVES:
     case CHATBOT_INTENTS.VIEW_ACTIVE_DRIVES:
       return handleDrives(params, effectiveRole, pageContext);
+    case CHATBOT_INTENTS.DRIVE_COUNT_BY_CITY:
+      return handleDriveCount(params, effectiveRole, false);
+    case CHATBOT_INTENTS.ACTIVE_DRIVE_COUNT:
+      return handleDriveCount(params, effectiveRole, true);
+    case CHATBOT_INTENTS.SLOT_COUNT_BY_CITY:
+    case CHATBOT_INTENTS.AVAILABLE_SLOT_COUNT:
+      return handleSlotCount(params, effectiveRole);
+    case CHATBOT_INTENTS.MY_BOOKING_COUNT:
+      return handleMyBookingCount(params);
+    case CHATBOT_INTENTS.MY_CERTIFICATE_COUNT:
+      return handleMyCertificateCount(params, effectiveRole);
+    case CHATBOT_INTENTS.USER_DASHBOARD_SUMMARY:
+      return handleUserDashboardSummary(params, effectiveRole);
+    case CHATBOT_INTENTS.ADMIN_DASHBOARD_SUMMARY:
+    case CHATBOT_INTENTS.SUPER_ADMIN_SUMMARY:
+      return handleAdminSummary(effectiveRole);
     case CHATBOT_INTENTS.BOOK_SLOT:
       return handleBookSlot(params, effectiveRole);
     case CHATBOT_INTENTS.VIEW_SLOT_RECOMMENDATIONS: {
@@ -2441,6 +3279,10 @@ export const executeChatbotAction = async ({
       return handleEligibilityCheck(params);
     case CHATBOT_INTENTS.VACCINE_INFO:
       return handleVaccineInfo(params, effectiveRole, pageContext);
+    case CHATBOT_INTENTS.HEALTH_KNOWLEDGE:
+      return handleHealthKnowledge(params, effectiveRole, pageContext);
+    case CHATBOT_INTENTS.NEWS_KNOWLEDGE:
+      return handleNewsKnowledge(params, effectiveRole, pageContext);
     case CHATBOT_INTENTS.CERTIFICATE_ISSUE_HELP:
       return handleCertificateIssue();
     case CHATBOT_INTENTS.ADMIN_PENDING_WORK:
@@ -2488,7 +3330,8 @@ export const executeChatbotAction = async ({
     case CHATBOT_INTENTS.VIEW_NEWS:
       return handleNews();
     case CHATBOT_INTENTS.VIEW_MY_BOOKINGS:
-      return handleMyBookings(params, effectiveRole);
+    case CHATBOT_INTENTS.USER_BOOKINGS_FILTER:
+      return handleMyBookings(params, effectiveRole, pageContext);
     case CHATBOT_INTENTS.CANCEL_BOOKING:
     case CHATBOT_INTENTS.RESCHEDULE_BOOKING:
       return handleBookingActionChoice(intent, params);

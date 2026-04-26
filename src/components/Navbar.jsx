@@ -177,7 +177,6 @@ export default function Navbar() {
 
   const isActive = (path) => location.pathname === path;
   const unreadCount = unreadCountState || notifications.filter((notification) => !notification.read).length;
-  const brandGradientId = "navShieldGrad";
   const footerContent = getFooterContent(String(role || "").toUpperCase(), isLoggedIn);
   const accountHomePath = getDefaultAuthenticatedPath(role);
   const footerDestinations = new Set([
@@ -193,51 +192,7 @@ export default function Navbar() {
       <nav className={`navbar navbar-expand-lg app-navbar ${scrolled ? "scrolled shadow-sm" : ""}`}>
         <div className="container app-navbar__inner">
           <Link className="navbar-brand app-brand d-flex align-items-center" to="/">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="32"
-              height="32"
-              viewBox="0 0 40 40"
-              fill="none"
-              className="app-brand__mark"
-            >
-              <defs>
-                <linearGradient id={brandGradientId} x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="var(--primary-color)" />
-                  <stop offset="100%" stopColor="var(--primary-strong)" />
-                </linearGradient>
-              </defs>
-
-              <path
-                d="M20 4 L36 12 L36 24 C36 34 28 40 20 42 C12 40 4 34 4 24 L4 12 Z"
-                fill={`url(#${brandGradientId})`}
-              />
-
-              <path
-                d="M20 10 L30 15 L30 22 C30 29 25 33 20 35 C15 33 10 29 10 22 L10 15 Z"
-                fill="#fff"
-                opacity="0.2"
-              />
-
-              <path
-                d="M16 20 L14 28 M20 18 L24 26 M24 20 L26 28"
-                stroke="var(--secondary-color)"
-                strokeWidth="2"
-                strokeLinecap="round"
-              />
-
-              <path
-                d="M20 8 L20 14 M16 10 L20 14 L24 10"
-                stroke="#fff"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-
-            <span className="app-brand__copy">
-              <span className="fw-bold app-brand-text">VaxZone</span>
-            </span>
+            <img src="/assets/logo/vaxzone-logo-report.png" alt="VaxZone logo" className="app-brand__mark" />
           </Link>
 
           <div className="app-navbar__controls d-flex align-items-center gap-2">

@@ -35,6 +35,7 @@ test.describe('Vaccination System E2E Tests', () => {
         fullName: 'Playwright User',
         email: provisionedUser.email,
         phoneNumber: '9876543210',
+        gender: 'Male',
         password: provisionedUser.password,
         dob: '2000-01-01',
       },
@@ -51,6 +52,7 @@ test.describe('Vaccination System E2E Tests', () => {
     await page.fill('input[name="password"]', 'Test@123456');
     await page.fill('input[name="confirmPassword"]', 'Test@123456');
     await page.fill('input[name="phoneNumber"]', '9876543210');
+    await page.selectOption('select[name="gender"]', 'Female');
     await page.fill('input[name="dob"]', '2000-01-01');
     await page.getByRole('checkbox', { name: /i agree to the/i }).check();
     await page.click('button[type="submit"]');

@@ -40,6 +40,15 @@ export const validatePhone = (value) => {
   return PHONE_REGEX.test(normalized) ? "" : "Enter a valid phone number";
 };
 
+export const validateGender = (value) => {
+  const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (!normalized) {
+    return "Gender is required";
+  }
+
+  return ["male", "female", "other"].includes(normalized) ? "" : "Select a valid gender";
+};
+
 export const validateAge = (value) => {
   const normalized = typeof value === "string" ? value.trim() : String(value ?? "").trim();
   if (!normalized) {

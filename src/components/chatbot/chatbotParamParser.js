@@ -4,6 +4,7 @@ const HINGLISH_REPLACEMENTS = [
   [/\bdikhao\b/g, "show"],
   [/\bdekhao\b/g, "show"],
   [/\bdekho\b/g, "show"],
+  [/\bdikha\b/g, "show"],
   [/\bkaro\b/g, "do"],
   [/\bkarna\b/g, "do"],
   [/\bkarni\b/g, "do"],
@@ -16,12 +17,17 @@ const HINGLISH_REPLACEMENTS = [
   [/\bmere\b/g, "my"],
   [/\bme\b/g, "in"],
   [/\bmein\b/g, "in"],
+  [/\bmain\b/g, "i"],
   [/\bkal\b/g, "tomorrow"],
   [/\baaj\b/g, "today"],
   [/\bradd\b/g, "cancel"],
   [/\bbadal\b/g, "change"],
   [/\bbuking\b/g, "booking"],
+  [/\bbookig\b/g, "booking"],
+  [/\bbookng\b/g, "booking"],
   [/\bsertificate\b/g, "certificate"],
+  [/\bcertifcate\b/g, "certificate"],
+  [/\bcertficate\b/g, "certificate"],
   [/\bcerti\b/g, "certificate"],
   [/\bcert\b/g, "certificate"],
   [/\btika\b/g, "vaccine"],
@@ -30,6 +36,11 @@ const HINGLISH_REPLACEMENTS = [
   [/\bvaccin\b/g, "vaccine"],
   [/\breshedule\b/g, "reschedule"],
   [/\brescedule\b/g, "reschedule"],
+  [/\bhelo\b/g, "hello"],
+  [/\bhlw\b/g, "hello"],
+  [/\bthnks\b/g, "thanks"],
+  [/\bthanku\b/g, "thanks"],
+  [/\bthx\b/g, "thanks"],
   [/\bkhol\b/g, "open"],
   [/\bnikat\b/g, "nearby"],
   [/\bpas\b/g, "nearby"],
@@ -62,6 +73,22 @@ const COMMON_CITIES = [
   "nagpur",
   "kanpur"
 ];
+
+const NON_CITY_PHRASES = new Set([
+  "my city",
+  "current city",
+  "current location",
+  "your city",
+  "this city",
+  "that city",
+  "nearby",
+  "nearby center",
+  "nearby centers",
+  "my area",
+  "my location",
+  "nearby centers show",
+  "show nearby centers"
+]);
 
 const COMMON_VACCINES = ["covaxin", "covishield", "sputnik", "booster"];
 
@@ -124,6 +151,13 @@ const titleCase = (value) =>
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
 
+const stripCityNoise = (value) =>
+  String(value || "")
+    .toLowerCase()
+    .replace(/\b(in|at|near|around|for|show|find|drive|drives|center|centers|slot|slots|tomorrow|today|my|current|city|area|location|please|need)\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
 const extractByRegex = (normalizedInput, patterns) => {
   for (const pattern of patterns) {
     const match = normalizedInput.match(pattern);
@@ -146,16 +180,56 @@ const extractFieldValue = (normalizedInput, labels) => {
 };
 
 export const extractCity = (normalizedInput) => {
+  const cleanedInput = stripCityNoise(normalizedInput);
+  if (!cleanedInput) {
+    return "";
+  }
+
   const exactCity = COMMON_CITIES.find((city) => normalizedInput.includes(city));
   if (exactCity) {
     return titleCase(exactCity);
   }
 
-  return extractByRegex(normalizedInput, [
+  const tokens = cleanedInput.split(/\s+/).filter(Boolean);
+  const fuzzyCity = COMMON_CITIES.find((city) => {
+    const cityTokens = city.split(/\s+/).filter(Boolean);
+    return cityTokens.every((cityToken) =>
+      tokens.some((token) =>
+        token === cityToken
+        || cityToken.startsWith(token)
+        || token.startsWith(cityToken)
+      )
+    );
+  });
+
+  if (fuzzyCity && !NON_CITY_PHRASES.has(fuzzyCity)) {
+    return titleCase(fuzzyCity);
+  }
+
+  const extracted = extractByRegex(normalizedInput, [
     /\b(?:in|near|around|at|for)\s+([a-z\s]{2,40})(?:\s+(?:today|tomorrow))?$/,
     /\b([a-z\s]{2,40})\s+city\b/,
     /\b([a-z\s]{2,40})\s+center\b/
   ]);
+
+  const normalizedExtracted = stripCityNoise(extracted);
+  if (!normalizedExtracted || NON_CITY_PHRASES.has(normalizedExtracted) || /\bmy\b/.test(normalizedExtracted)) {
+    return "";
+  }
+
+  const extractedFuzzyCity = COMMON_CITIES.find((city) => {
+    const cityTokens = city.split(/\s+/).filter(Boolean);
+    const extractedTokens = normalizedExtracted.split(/\s+/).filter(Boolean);
+    return cityTokens.every((cityToken) =>
+      extractedTokens.some((token) =>
+        token === cityToken
+        || cityToken.startsWith(token)
+        || token.startsWith(cityToken)
+      )
+    );
+  });
+
+  return extractedFuzzyCity ? titleCase(extractedFuzzyCity) : titleCase(normalizedExtracted);
 };
 
 export const extractDate = (normalizedInput) => {
@@ -284,6 +358,22 @@ const extractAnalyticsMetric = (normalizedInput) => {
   return match?.metric || "";
 };
 
+const extractBookingStatusFilter = (normalizedInput) => {
+  if (/\b(pending|awaiting)\b/.test(normalizedInput)) {
+    return "PENDING";
+  }
+  if (/\b(upcoming|confirmed|booked)\b/.test(normalizedInput)) {
+    return "UPCOMING";
+  }
+  if (/\b(completed|done|vaccinated)\b/.test(normalizedInput)) {
+    return "COMPLETED";
+  }
+  if (/\b(cancelled|canceled|cancel)\b/.test(normalizedInput)) {
+    return "CANCELLED";
+  }
+  return "";
+};
+
 const findBoolean = (normalizedInput, words) => words.some((word) => normalizedInput.includes(word));
 
 export const extractChatbotParams = (rawInput) => {
@@ -332,13 +422,14 @@ export const extractChatbotParams = (rawInput) => {
     password: extractFieldValue(normalizedInput, ["password"]),
     roleTarget: extractRoleTarget(normalizedInput),
     analyticsMetric: extractAnalyticsMetric(normalizedInput),
+    bookingStatusFilter: extractBookingStatusFilter(normalizedInput),
     priority: extractPriority(normalizedInput),
     rating: extractRating(normalizedInput),
     published: extractPublishedStatus(normalizedInput),
     exportTarget: extractExportTarget(normalizedInput),
     macroKey: extractMacroKey(normalizedInput),
     downloadFormat: normalizedInput.includes("png") || normalizedInput.includes("image") ? "png" : normalizedInput.includes("pdf") ? "pdf" : "",
-    confirmation: findBoolean(normalizedInput, ["confirm", "yes", "proceed", "book this", "submit this"]),
+    confirmation: findBoolean(normalizedInput, ["confirm", "yes", "yeah", "yep", "sure", "ok", "okay", "proceed", "book this", "submit this"]),
     asksSystemHealth: findBoolean(normalizedInput, ["system working", "backend status", "api status", "health status"]),
     asksEligibility: findBoolean(normalizedInput, ["am i eligible", "eligible for", "can i book this drive"]),
     asksCertificateIssue: findBoolean(normalizedInput, ["certificate not showing", "certificate issue", "where is my certificate"]),
@@ -355,6 +446,7 @@ export const extractChatbotParams = (rawInput) => {
     asksInsights: findBoolean(normalizedInput, ["personal insights", "admin insights", "super admin insights", "system growth", "busiest center"]),
     asksDemoScript: findBoolean(normalizedInput, ["demo script", "run guided demo"]),
     wantsNearby: findBoolean(normalizedInput, ["nearby", "nearest", "close", "around me"]),
+    wantsCurrentCity: findBoolean(normalizedInput, ["my city", "my area", "my location", "current city", "current location", "in my city"]),
     availableOnly: findBoolean(normalizedInput, ["available only", "only available", "bookable", "available"]),
     asksForLogin: findBoolean(normalizedInput, ["login", "sign in"]),
     asksForRegister: findBoolean(normalizedInput, ["register", "sign up", "signup"]),

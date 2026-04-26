@@ -68,6 +68,8 @@ export const CHATBOT_TERM_GROUPS = {
   notification: ["notification", "notifications", "alert", "alerts", "unread"],
   admin: ["admin", "admins", "dashboard"],
   analytics: ["analytics", "stats", "overview", "report", "snapshot"],
+  count: ["count", "counts", "number", "many", "total"],
+  summary: ["summary", "overview", "snapshot", "dashboard"],
   reply: ["reply", "respond", "response"],
   news: ["news", "announcement", "announcements", "publish", "post"],
   user: ["user", "users", "citizen"],

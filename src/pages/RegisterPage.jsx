@@ -14,6 +14,7 @@ import {
   validateDob,
   validateEmail,
   validateFullName,
+  validateGender,
   validatePassword,
   validatePhone
 } from "../utils/authValidation";
@@ -22,6 +23,7 @@ const initialForm = {
   fullName: "",
   email: "",
   phoneNumber: "",
+  gender: "",
   dob: "",
   password: "",
   confirmPassword: "",
@@ -48,6 +50,7 @@ export default function RegisterPage() {
       fullName: validateFullName(form.fullName),
       email: validateEmail(form.email),
       phoneNumber: validatePhone(phoneValidationValue),
+      gender: validateGender(form.gender),
       dob: validateDob(form.dob),
       password: validatePassword(form.password),
       confirmPassword: validateConfirmPassword(form.password, form.confirmPassword)
@@ -115,6 +118,7 @@ export default function RegisterPage() {
         fullName: form.fullName.trim(),
         email: form.email.trim(),
         phoneNumber: `+91${form.phoneNumber.replace(/\s+/g, "")}`,
+        gender: form.gender,
         password: form.password,
         dob: form.dob
       });
@@ -236,6 +240,31 @@ export default function RegisterPage() {
             hint="Include country code for reliable verification"
             onChange={(event) => updateField("phoneNumber", event.target.value.replace(/\D/g, "").slice(0, 10))}
           />
+
+          <div className="auth-field auth-grid-span-1">
+            <label className="auth-label" htmlFor="register-gender">Gender</label>
+            <div className={`auth-input-shell ${errors.gender || (form.gender ? validationErrors.gender : "") ? "is-invalid" : ""}`}>
+              <select
+                id="register-gender"
+                className="auth-input"
+                name="gender"
+                value={form.gender}
+                aria-invalid={Boolean(errors.gender || (form.gender ? validationErrors.gender : ""))}
+                aria-describedby={errors.gender || (form.gender ? validationErrors.gender : "") ? "register-gender-error" : "register-gender-hint"}
+                onChange={(event) => updateField("gender", event.target.value)}
+              >
+                <option value="">Select gender</option>
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+            {errors.gender || (form.gender ? validationErrors.gender : "") ? (
+              <p className="auth-field-error" id="register-gender-error">{errors.gender || validationErrors.gender}</p>
+            ) : (
+              <p className="auth-field-hint" id="register-gender-hint">Used on your certificate and profile records</p>
+            )}
+          </div>
 
           <InputField
             id="register-dob"

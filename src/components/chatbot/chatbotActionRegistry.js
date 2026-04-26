@@ -8,15 +8,31 @@ export const CHATBOT_ACTION_TYPES = {
 };
 
 export const CHATBOT_INTENTS = {
+  GREETING: "GREETING",
+  THANKS: "THANKS",
+  GOODBYE: "GOODBYE",
+  ACKNOWLEDGEMENT: "ACKNOWLEDGEMENT",
   FIND_CENTER: "FIND_CENTER",
+  CENTER_COUNT_BY_CITY: "CENTER_COUNT_BY_CITY",
   SEARCH_DRIVES: "SEARCH_DRIVES",
+  DRIVE_COUNT_BY_CITY: "DRIVE_COUNT_BY_CITY",
   VIEW_ACTIVE_DRIVES: "VIEW_ACTIVE_DRIVES",
+  ACTIVE_DRIVE_COUNT: "ACTIVE_DRIVE_COUNT",
   BOOK_SLOT: "BOOK_SLOT",
   FIND_NEARBY_CENTER: "FIND_NEARBY_CENTER",
   VIEW_SLOT_RECOMMENDATIONS: "VIEW_SLOT_RECOMMENDATIONS",
+  SLOT_COUNT_BY_CITY: "SLOT_COUNT_BY_CITY",
+  AVAILABLE_SLOT_COUNT: "AVAILABLE_SLOT_COUNT",
+  MY_BOOKING_COUNT: "MY_BOOKING_COUNT",
+  MY_CERTIFICATE_COUNT: "MY_CERTIFICATE_COUNT",
+  USER_DASHBOARD_SUMMARY: "USER_DASHBOARD_SUMMARY",
+  ADMIN_DASHBOARD_SUMMARY: "ADMIN_DASHBOARD_SUMMARY",
+  SUPER_ADMIN_SUMMARY: "SUPER_ADMIN_SUMMARY",
   SYSTEM_HEALTH: "SYSTEM_HEALTH",
   CHECK_ELIGIBILITY: "CHECK_ELIGIBILITY",
   VACCINE_INFO: "VACCINE_INFO",
+  HEALTH_KNOWLEDGE: "HEALTH_KNOWLEDGE",
+  NEWS_KNOWLEDGE: "NEWS_KNOWLEDGE",
   CERTIFICATE_ISSUE_HELP: "CERTIFICATE_ISSUE_HELP",
   ADMIN_PENDING_WORK: "ADMIN_PENDING_WORK",
   SMART_SEARCH: "SMART_SEARCH",
@@ -44,6 +60,7 @@ export const CHATBOT_INTENTS = {
   VIEW_CERTIFICATES: "VIEW_CERTIFICATES",
   DOWNLOAD_CERTIFICATE: "DOWNLOAD_CERTIFICATE",
   VIEW_MY_BOOKINGS: "VIEW_MY_BOOKINGS",
+  USER_BOOKINGS_FILTER: "USER_BOOKINGS_FILTER",
   CANCEL_BOOKING: "CANCEL_BOOKING",
   RESCHEDULE_BOOKING: "RESCHEDULE_BOOKING",
   JOIN_WAITLIST: "JOIN_WAITLIST",
@@ -108,11 +125,46 @@ const SUPER_ADMIN_ROLES = [CHATBOT_ROLES.SUPER_ADMIN];
 const adminRoute = (section = "dashboard") => `/admin/${section}`;
 
 export const CHATBOT_ACTION_REGISTRY = {
+  [CHATBOT_INTENTS.GREETING]: {
+    intent: CHATBOT_INTENTS.GREETING,
+    allowedRoles: ALL_ROLES,
+    requiredParams: [],
+    actionType: CHATBOT_ACTION_TYPES.API_CALL,
+    route: "/"
+  },
+  [CHATBOT_INTENTS.THANKS]: {
+    intent: CHATBOT_INTENTS.THANKS,
+    allowedRoles: ALL_ROLES,
+    requiredParams: [],
+    actionType: CHATBOT_ACTION_TYPES.API_CALL,
+    route: "/"
+  },
+  [CHATBOT_INTENTS.GOODBYE]: {
+    intent: CHATBOT_INTENTS.GOODBYE,
+    allowedRoles: ALL_ROLES,
+    requiredParams: [],
+    actionType: CHATBOT_ACTION_TYPES.API_CALL,
+    route: "/"
+  },
+  [CHATBOT_INTENTS.ACKNOWLEDGEMENT]: {
+    intent: CHATBOT_INTENTS.ACKNOWLEDGEMENT,
+    allowedRoles: ALL_ROLES,
+    requiredParams: [],
+    actionType: CHATBOT_ACTION_TYPES.API_CALL,
+    route: "/"
+  },
   [CHATBOT_INTENTS.FIND_CENTER]: {
     intent: CHATBOT_INTENTS.FIND_CENTER,
     allowedRoles: ALL_ROLES,
     requiredParams: [],
     actionType: CHATBOT_ACTION_TYPES.HYBRID,
+    route: "/centers"
+  },
+  [CHATBOT_INTENTS.CENTER_COUNT_BY_CITY]: {
+    intent: CHATBOT_INTENTS.CENTER_COUNT_BY_CITY,
+    allowedRoles: ALL_ROLES,
+    requiredParams: [],
+    actionType: CHATBOT_ACTION_TYPES.API_CALL,
     route: "/centers"
   },
   [CHATBOT_INTENTS.FIND_NEARBY_CENTER]: {
@@ -129,8 +181,22 @@ export const CHATBOT_ACTION_REGISTRY = {
     actionType: CHATBOT_ACTION_TYPES.HYBRID,
     route: "/drives"
   },
+  [CHATBOT_INTENTS.DRIVE_COUNT_BY_CITY]: {
+    intent: CHATBOT_INTENTS.DRIVE_COUNT_BY_CITY,
+    allowedRoles: ALL_ROLES,
+    requiredParams: [],
+    actionType: CHATBOT_ACTION_TYPES.API_CALL,
+    route: "/drives"
+  },
   [CHATBOT_INTENTS.VIEW_ACTIVE_DRIVES]: {
     intent: CHATBOT_INTENTS.VIEW_ACTIVE_DRIVES,
+    allowedRoles: ALL_ROLES,
+    requiredParams: [],
+    actionType: CHATBOT_ACTION_TYPES.API_CALL,
+    route: "/drives"
+  },
+  [CHATBOT_INTENTS.ACTIVE_DRIVE_COUNT]: {
+    intent: CHATBOT_INTENTS.ACTIVE_DRIVE_COUNT,
     allowedRoles: ALL_ROLES,
     requiredParams: [],
     actionType: CHATBOT_ACTION_TYPES.API_CALL,
@@ -149,6 +215,55 @@ export const CHATBOT_ACTION_REGISTRY = {
     requiredParams: [],
     actionType: CHATBOT_ACTION_TYPES.API_CALL,
     route: "/user/bookings?tab=slots"
+  },
+  [CHATBOT_INTENTS.SLOT_COUNT_BY_CITY]: {
+    intent: CHATBOT_INTENTS.SLOT_COUNT_BY_CITY,
+    allowedRoles: ALL_ROLES,
+    requiredParams: [],
+    actionType: CHATBOT_ACTION_TYPES.API_CALL,
+    route: "/user/bookings?tab=slots"
+  },
+  [CHATBOT_INTENTS.AVAILABLE_SLOT_COUNT]: {
+    intent: CHATBOT_INTENTS.AVAILABLE_SLOT_COUNT,
+    allowedRoles: ALL_ROLES,
+    requiredParams: [],
+    actionType: CHATBOT_ACTION_TYPES.API_CALL,
+    route: "/user/bookings?tab=slots"
+  },
+  [CHATBOT_INTENTS.MY_BOOKING_COUNT]: {
+    intent: CHATBOT_INTENTS.MY_BOOKING_COUNT,
+    allowedRoles: SIGNED_IN_ROLES,
+    requiredParams: [],
+    actionType: CHATBOT_ACTION_TYPES.API_CALL,
+    route: "/user/bookings?tab=bookings"
+  },
+  [CHATBOT_INTENTS.MY_CERTIFICATE_COUNT]: {
+    intent: CHATBOT_INTENTS.MY_CERTIFICATE_COUNT,
+    allowedRoles: SIGNED_IN_ROLES,
+    requiredParams: [],
+    actionType: CHATBOT_ACTION_TYPES.API_CALL,
+    route: "/certificates"
+  },
+  [CHATBOT_INTENTS.USER_DASHBOARD_SUMMARY]: {
+    intent: CHATBOT_INTENTS.USER_DASHBOARD_SUMMARY,
+    allowedRoles: SIGNED_IN_ROLES,
+    requiredParams: [],
+    actionType: CHATBOT_ACTION_TYPES.API_CALL,
+    route: "/user/bookings"
+  },
+  [CHATBOT_INTENTS.ADMIN_DASHBOARD_SUMMARY]: {
+    intent: CHATBOT_INTENTS.ADMIN_DASHBOARD_SUMMARY,
+    allowedRoles: ADMIN_ROLES,
+    requiredParams: [],
+    actionType: CHATBOT_ACTION_TYPES.API_CALL,
+    route: adminRoute("dashboard")
+  },
+  [CHATBOT_INTENTS.SUPER_ADMIN_SUMMARY]: {
+    intent: CHATBOT_INTENTS.SUPER_ADMIN_SUMMARY,
+    allowedRoles: SUPER_ADMIN_ROLES,
+    requiredParams: [],
+    actionType: CHATBOT_ACTION_TYPES.API_CALL,
+    route: adminRoute("dashboard")
   },
   [CHATBOT_INTENTS.SYSTEM_HEALTH]: {
     intent: CHATBOT_INTENTS.SYSTEM_HEALTH,
@@ -170,6 +285,20 @@ export const CHATBOT_ACTION_REGISTRY = {
     requiredParams: [],
     actionType: CHATBOT_ACTION_TYPES.API_CALL,
     route: "/drives"
+  },
+  [CHATBOT_INTENTS.HEALTH_KNOWLEDGE]: {
+    intent: CHATBOT_INTENTS.HEALTH_KNOWLEDGE,
+    allowedRoles: ALL_ROLES,
+    requiredParams: [],
+    actionType: CHATBOT_ACTION_TYPES.API_CALL,
+    route: "/news"
+  },
+  [CHATBOT_INTENTS.NEWS_KNOWLEDGE]: {
+    intent: CHATBOT_INTENTS.NEWS_KNOWLEDGE,
+    allowedRoles: ALL_ROLES,
+    requiredParams: [],
+    actionType: CHATBOT_ACTION_TYPES.API_CALL,
+    route: "/news"
   },
   [CHATBOT_INTENTS.CERTIFICATE_ISSUE_HELP]: {
     intent: CHATBOT_INTENTS.CERTIFICATE_ISSUE_HELP,
@@ -348,13 +477,20 @@ export const CHATBOT_ACTION_REGISTRY = {
   },
   [CHATBOT_INTENTS.DOWNLOAD_CERTIFICATE]: {
     intent: CHATBOT_INTENTS.DOWNLOAD_CERTIFICATE,
-    allowedRoles: USER_ROLES,
+    allowedRoles: SIGNED_IN_ROLES,
     requiredParams: [],
     actionType: CHATBOT_ACTION_TYPES.OPEN_MODAL,
     route: "/certificates"
   },
   [CHATBOT_INTENTS.VIEW_MY_BOOKINGS]: {
     intent: CHATBOT_INTENTS.VIEW_MY_BOOKINGS,
+    allowedRoles: SIGNED_IN_ROLES,
+    requiredParams: [],
+    actionType: CHATBOT_ACTION_TYPES.API_CALL,
+    route: "/user/bookings?tab=bookings"
+  },
+  [CHATBOT_INTENTS.USER_BOOKINGS_FILTER]: {
+    intent: CHATBOT_INTENTS.USER_BOOKINGS_FILTER,
     allowedRoles: SIGNED_IN_ROLES,
     requiredParams: [],
     actionType: CHATBOT_ACTION_TYPES.API_CALL,

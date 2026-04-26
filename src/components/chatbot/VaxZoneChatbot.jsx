@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { getRole, isAuthenticated } from "../../utils/auth";
+import { getEmail, getName, getRole, isAuthenticated } from "../../utils/auth";
 import {
   CHATBOT_HIDDEN_PATH_PREFIXES,
   CHATBOT_MAX_HISTORY,
@@ -12,7 +12,6 @@ import { buildChatbotErrorReply, executeChatbotAction } from "./chatbotActions";
 import ChatbotCard from "./chatbotCards";
 import { getSlashCommandSuggestions } from "./chatbotCommands";
 import { getChatbotDemoCommands } from "./chatbotDemo";
-import { getDemoScriptCommands } from "./chatbotDemoMode";
 import { CHATBOT_GUIDED_FLOWS } from "./chatbotFlows";
 import { buildProactiveSuggestions, buildReturningGreeting } from "./chatbotInsights";
 import ChatbotWidgets from "./chatbotWidgets";
@@ -140,6 +139,37 @@ const downloadTextFile = (filename, contents) => {
   window.setTimeout(() => URL.revokeObjectURL(link.href), 0);
 };
 
+const buildAuthSignature = ({ authenticated, role, email, name }) => {
+  if (!authenticated) {
+    return "guest";
+  }
+
+  return [String(role || "USER").toUpperCase(), String(email || "").trim().toLowerCase(), String(name || "").trim().toLowerCase()]
+    .filter(Boolean)
+    .join("|");
+};
+
+const getDisplayName = (name) => {
+  const normalized = String(name || "").trim();
+  if (!normalized) {
+    return "";
+  }
+
+  return normalized.split(/\s+/)[0].slice(0, 32);
+};
+
+const getChatIdentityLabel = ({ displayName, role }) => {
+  if (displayName) {
+    return displayName;
+  }
+
+  if (role === "GUEST") {
+    return "Guest";
+  }
+
+  return "VaxZone member";
+};
+
 export default function VaxZoneChatbot() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -149,11 +179,17 @@ export default function VaxZoneChatbot() {
   const inputRef = useRef(null);
   const recognitionRef = useRef(null);
   const previousRoleRef = useRef(null);
+  const previousAuthSignatureRef = useRef(null);
   const [authState, setAuthState] = useState(() => ({
     authenticated: isAuthenticated(),
-    role: getRole()
+    role: getRole(),
+    email: getEmail(),
+    name: getName()
   }));
   const role = authState.authenticated ? String(authState.role || "").toUpperCase() || "USER" : "GUEST";
+  const authSignature = useMemo(() => buildAuthSignature(authState), [authState]);
+  const displayName = useMemo(() => getDisplayName(authState.name), [authState.name]);
+  const chatIdentityLabel = useMemo(() => getChatIdentityLabel({ displayName, role }), [displayName, role]);
   const hiddenOnRoute = CHATBOT_HIDDEN_PATH_PREFIXES.some((prefix) => location.pathname.startsWith(prefix));
   const pageContext = useMemo(
     () => resolveChatbotPageContext({ pathname: location.pathname, search: location.search }),
@@ -191,11 +227,17 @@ export default function VaxZoneChatbot() {
   const hasStartedConversation = messages.some((message) => message.role === "user");
   const visibleQuickActions = showMoreActions ? allQuickActions.slice(0, 8) : allQuickActions.slice(0, 4);
   const hiddenQuickActions = allQuickActions.length - visibleQuickActions.length;
+  const isTabletViewport = viewportState.width <= 1024;
   const isMobileViewport = viewportState.width <= 768;
-  const isSmallPhoneViewport = viewportState.width <= 360;
+  const isSmallPhoneViewport = viewportState.width <= 480;
   const voiceSupported = isChatbotVoiceSupported();
+  const mobileQuickChips = useMemo(() => visibleQuickActions.slice(0, 4).map((action) => ({
+    label: action.label,
+    prompt: action.value
+  })), [visibleQuickActions]);
   const shouldShowOnboarding = !onboardingState?.[role];
   const onboardingCards = ONBOARDING_CARDS[role] || ONBOARDING_CARDS.GUEST;
+  const capabilityCards = shouldShowOnboarding ? onboardingCards.slice(0, 3) : onboardingCards.slice(0, 2);
   const slashSuggestions = useMemo(() => getSlashCommandSuggestions(inputValue), [inputValue]);
   const proactiveSuggestions = useMemo(
     () => buildProactiveSuggestions({
@@ -235,6 +277,24 @@ export default function VaxZoneChatbot() {
     }
     return "Good Evening";
   }, []);
+  const personalizedGreeting = useMemo(() => {
+    if (displayName) {
+      return `${greetingByTime}, ${displayName}`;
+    }
+
+    return role === "GUEST" ? `${greetingByTime}` : `${greetingByTime}, welcome back`;
+  }, [displayName, greetingByTime, role]);
+  const assistantHighlights = useMemo(() => {
+    const highlights = capabilityCards.map((card) => card.subtitle);
+    if (pageContext.key === "bookings") {
+      highlights.unshift("Use this panel to review bookings, slots, and certificate actions without leaving the page.");
+    } else if (pageContext.key === "home") {
+      highlights.unshift("Ask for nearby centers, drives in your city, live counts, or certificate help from one place.");
+    } else if (pageContext.key === "admin") {
+      highlights.unshift("Keep admin tasks focused with quick routing, live lookups, and role-safe actions.");
+    }
+    return [...new Set(highlights)].slice(0, 3);
+  }, [capabilityCards, pageContext.key]);
   const copilotWidgets = useMemo(() => {
     const pageActions = visibleQuickActions.slice(0, 4).map((item) => ({ label: item.label, prompt: item.value }));
     return [
@@ -280,7 +340,9 @@ export default function VaxZoneChatbot() {
     const syncAuth = () => {
       setAuthState({
         authenticated: isAuthenticated(),
-        role: getRole()
+        role: getRole(),
+        email: getEmail(),
+        name: getName()
       });
       setRecentActions(readChatbotRecentActions());
     };
@@ -345,6 +407,36 @@ export default function VaxZoneChatbot() {
   }, [messages.length]);
 
   useEffect(() => {
+    if (!previousAuthSignatureRef.current) {
+      previousAuthSignatureRef.current = authSignature;
+      return;
+    }
+
+    if (previousAuthSignatureRef.current === authSignature) {
+      return;
+    }
+
+    setMessages(readChatbotHistory());
+    setConversationState(normalizeStoredConversationState(readChatbotSessionState()));
+    setMessageFeedback(readChatbotMessageFeedback());
+    setPreferences(readChatbotPreferences());
+    setDemoMode(readChatbotDemoMode());
+    setOnboardingState(readChatbotOnboardingState());
+    setRecentActions(readChatbotRecentActions());
+    setNotesCount(readChatbotNotes().length);
+    setBookmarksCount(readChatbotBookmarks().length);
+    setInputValue("");
+    setMenuOpen(false);
+    setShowMoreActions(false);
+    setVoiceError("");
+    stopChatbotVoiceInput(recognitionRef.current);
+    recognitionRef.current = null;
+    setIsListening(false);
+    previousRoleRef.current = role;
+    previousAuthSignatureRef.current = authSignature;
+  }, [authSignature, role]);
+
+  useEffect(() => {
     const nextOnboarding = readChatbotOnboardingState();
     setOnboardingState(nextOnboarding);
   }, [role]);
@@ -389,10 +481,10 @@ export default function VaxZoneChatbot() {
   }, [isLoading, messages]);
 
   useEffect(() => {
-    if (uiState.isOpen && !uiState.isMinimized && !isMobileViewport) {
+    if (uiState.isOpen && !uiState.isMinimized && !isTabletViewport) {
       window.setTimeout(() => inputRef.current?.focus(), 120);
     }
-  }, [isMobileViewport, uiState.isMinimized, uiState.isOpen]);
+  }, [isTabletViewport, uiState.isMinimized, uiState.isOpen]);
 
   useEffect(() => {
     if (!uiState.isOpen) {
@@ -469,6 +561,16 @@ export default function VaxZoneChatbot() {
     setMessageFeedback({});
     setVoiceError("");
     writeChatbotMessageFeedback({});
+  };
+
+  const toggleLauncher = () => {
+    setUiState((current) => {
+      if (current.isOpen && !current.isMinimized) {
+        return { isOpen: true, isMinimized: true };
+      }
+
+      return { isOpen: true, isMinimized: false };
+    });
   };
 
   const handleShare = async (text) => {
@@ -572,6 +674,8 @@ export default function VaxZoneChatbot() {
     const loweredPrompt = prompt.toLowerCase();
     const nextLoadingLabel = loweredPrompt.includes("certificate")
       ? "Verifying certificate..."
+      : loweredPrompt.includes("pending booking") || loweredPrompt.includes("upcoming booking") || loweredPrompt.includes("my booking")
+        ? "Checking your bookings..."
       : loweredPrompt.includes("booking") || loweredPrompt.includes("slot")
         ? "Checking drives..."
         : loweredPrompt.includes("stats") || loweredPrompt.includes("insight")
@@ -674,7 +778,7 @@ export default function VaxZoneChatbot() {
                     <h2>{CHATBOT_NAME}</h2>
                     <span className="vaxzone-chatbot__built-in-badge">{pageContext.label}</span>
                   </div>
-                  <p>{greetingByTime} • {getRoleSubtitle(role)}</p>
+                  <p>{greetingByTime} | {chatIdentityLabel}</p>
                 </div>
               </div>
               <div className="vaxzone-chatbot__chat-header-actions" ref={menuRef}>
@@ -825,7 +929,7 @@ export default function VaxZoneChatbot() {
                 </div>
               ) : null}
             </div>
-            {copilotMode && !isMobileViewport ? (
+            {copilotMode && !isTabletViewport ? (
               <aside className="vaxzone-chatbot__copilot-panel">
                 <div className="vaxzone-chatbot__copilot-section">
                   <h3>Live Suggestions</h3>
@@ -867,10 +971,10 @@ export default function VaxZoneChatbot() {
             </div>
           </>
         ) : (
-          <div className="vaxzone-chatbot__welcome">
-            <div className="vaxzone-chatbot__welcome-topline">
-              <span className="vaxzone-chatbot__built-in-badge">{pageContext.label}</span>
-              <div className="vaxzone-chatbot__welcome-topline-actions">
+            <div className="vaxzone-chatbot__welcome">
+              <div className="vaxzone-chatbot__welcome-topline">
+                <span className="vaxzone-chatbot__built-in-badge">{pageContext.label}</span>
+                <div className="vaxzone-chatbot__welcome-topline-actions">
                 <button
                   type="button"
                   className="vaxzone-chatbot__header-button"
@@ -889,59 +993,64 @@ export default function VaxZoneChatbot() {
                 </button>
               </div>
             </div>
-            <div className="vaxzone-chatbot__welcome-mark">
-              <i className="bi bi-stars"></i>
+            <div className="vaxzone-chatbot__welcome-hero">
+              <div className="vaxzone-chatbot__welcome-header">
+                <div className="vaxzone-chatbot__welcome-brand">
+                  <div className="vaxzone-chatbot__welcome-brand-mark">
+                    <img src="/assets/logo/vaxzone-logo.svg" alt="VaxZone" className="vaxzone-chatbot__brand-logo" />
+                  </div>
+                  <div className="vaxzone-chatbot__welcome-brand-copy">
+                    <span className="vaxzone-chatbot__welcome-kicker">VaxZone Assistant</span>
+                    <h2>{CHATBOT_NAME}</h2>
+                    <p className="vaxzone-chatbot__welcome-copy">Secure vaccination guidance for {pageContext.label.toLowerCase()}.</p>
+                  </div>
+                </div>
+                <div className="vaxzone-chatbot__welcome-status">
+                  <span className="vaxzone-chatbot__welcome-role">{chatIdentityLabel}</span>
+                  <span className="vaxzone-chatbot__welcome-role">{isOnline ? "Online" : "Offline"}</span>
+                </div>
+              </div>
+              <div className="vaxzone-chatbot__welcome-greeting-card">
+                <span className="vaxzone-chatbot__welcome-kicker">Welcome</span>
+                <p className="vaxzone-chatbot__welcome-title">{personalizedGreeting}</p>
+                <p className="vaxzone-chatbot__welcome-copy">{displayName ? `I am ready to help you with bookings, centers, certificates, and updates.` : returningGreeting}</p>
+                <p className="vaxzone-chatbot__welcome-copy">{getWelcomePrompt(role, pageContext)}</p>
+              </div>
             </div>
-            <h2>{CHATBOT_NAME}</h2>
-            <p className="vaxzone-chatbot__welcome-copy">{greetingByTime}</p>
-            <p className="vaxzone-chatbot__welcome-copy">{returningGreeting}</p>
-            <p className="vaxzone-chatbot__welcome-title">Smart assistant for {pageContext.label}</p>
-            <p className="vaxzone-chatbot__welcome-copy">{getWelcomePrompt(role, pageContext)}</p>
             {!isOnline ? <div className="vaxzone-chatbot__status-line">You seem offline. Cached chat is available, but live API actions are paused.</div> : null}
             {demoMode ? <div className="vaxzone-chatbot__status-line">Demo mode is on. Suggestions use only real available features.</div> : null}
-            <div className="vaxzone-chatbot__welcome-role">{getRoleSubtitle(role)}</div>
-            <div className="vaxzone-chatbot__welcome-role">Try asking: {tryAsking.join(" | ")}</div>
-            {proactiveSuggestions.length ? (
-              <div className="vaxzone-chatbot__cards">
-                {proactiveSuggestions.map((item, index) => (
-                  <article key={`proactive-${index}`} className="vaxzone-chatbot__card vaxzone-chatbot__card--record">
-                    <div className="vaxzone-chatbot__card-topline">
-                      <div className="vaxzone-chatbot__card-copy">
-                        <div className="vaxzone-chatbot__card-eyebrow">Proactive</div>
-                        <h4 className="vaxzone-chatbot__card-title">{item}</h4>
-                        <p className="vaxzone-chatbot__card-subtitle">Suggested from your role, page, and recent activity.</p>
-                      </div>
+            <div className="vaxzone-chatbot__welcome-meta">
+              <div className="vaxzone-chatbot__welcome-role">Notes {notesCount} | Bookmarks {bookmarksCount}</div>
+              <div className="vaxzone-chatbot__welcome-role">{pageContext.label}</div>
+            </div>
+            <div className="vaxzone-chatbot__welcome-grid">
+              <article className="vaxzone-chatbot__welcome-panel">
+                <div className="vaxzone-chatbot__card-eyebrow">What I can do</div>
+                <div className="vaxzone-chatbot__welcome-list">
+                  {assistantHighlights.map((item, index) => (
+                    <div key={`highlight-${index}`} className="vaxzone-chatbot__welcome-list-item">
+                      <span className="vaxzone-chatbot__welcome-list-dot" aria-hidden="true"></span>
+                      <span>{item}</span>
                     </div>
-                  </article>
-                ))}
-              </div>
-            ) : null}
-            {shouldShowOnboarding ? (
-              <div className="vaxzone-chatbot__cards">
-                {onboardingCards.map((card) => (
-                  <article key={card.id} className="vaxzone-chatbot__card vaxzone-chatbot__card--record">
-                    <div className="vaxzone-chatbot__card-topline">
-                      <div className="vaxzone-chatbot__card-copy">
-                        <div className="vaxzone-chatbot__card-eyebrow">Welcome</div>
-                        <h4 className="vaxzone-chatbot__card-title">{card.title}</h4>
-                        <p className="vaxzone-chatbot__card-subtitle">{card.subtitle}</p>
-                      </div>
-                    </div>
-                  </article>
-                ))}
-                <button
-                  type="button"
-                  className="vaxzone-chatbot__more-actions"
-                  onClick={() => {
-                    const nextValue = { ...onboardingState, [role]: true };
-                    setOnboardingState(nextValue);
-                    writeChatbotOnboardingState(nextValue);
-                  }}
-                >
-                  Continue to assistant
-                </button>
-              </div>
-            ) : null}
+                  ))}
+                </div>
+              </article>
+              <article className="vaxzone-chatbot__welcome-panel">
+                <div className="vaxzone-chatbot__card-eyebrow">Try asking</div>
+                <div className="vaxzone-chatbot__welcome-actions">
+                  {tryAsking.slice(0, 4).map((item) => (
+                    <button
+                      type="button"
+                      key={item}
+                      className="vaxzone-chatbot__welcome-chip"
+                      onClick={() => handleSend(item)}
+                    >
+                      {item}
+                    </button>
+                  ))}
+                </div>
+              </article>
+            </div>
             <div className="vaxzone-chatbot__welcome-actions">
               {visibleQuickActions.map((action) => (
                 <button
@@ -954,9 +1063,29 @@ export default function VaxZoneChatbot() {
                 </button>
               ))}
             </div>
+            {proactiveSuggestions.length ? (
+              <div className="vaxzone-chatbot__cards">
+                {proactiveSuggestions.slice(0, 1).map((item, index) => (
+                  <article key={`proactive-${index}`} className="vaxzone-chatbot__card vaxzone-chatbot__card--record">
+                    <div className="vaxzone-chatbot__card-topline">
+                      <div className="vaxzone-chatbot__card-copy">
+                        <div className="vaxzone-chatbot__card-eyebrow">Suggested next</div>
+                        <h4 className="vaxzone-chatbot__card-title">{item}</h4>
+                        <p className="vaxzone-chatbot__card-subtitle">Based on your role and current page.</p>
+                      </div>
+                    </div>
+                    <div className="vaxzone-chatbot__card-actions">
+                      <button type="button" className="vaxzone-chatbot__card-button" onClick={() => handleSend(item)}>
+                        Open
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : null}
             {recentActions.length ? (
               <div className="vaxzone-chatbot__cards">
-                {recentActions.slice(0, 3).map((action) => (
+                {recentActions.slice(0, 1).map((action) => (
                   <article key={action.id || action.prompt} className="vaxzone-chatbot__card vaxzone-chatbot__card--record">
                     <div className="vaxzone-chatbot__card-topline">
                       <div className="vaxzone-chatbot__card-copy">
@@ -975,17 +1104,6 @@ export default function VaxZoneChatbot() {
               </div>
             ) : null}
             <div className="vaxzone-chatbot__welcome-actions">
-              <button
-                type="button"
-                className="vaxzone-chatbot__welcome-chip"
-                onClick={() => {
-                  const nextValue = !demoMode;
-                  setDemoMode(nextValue);
-                  writeChatbotDemoMode(nextValue);
-                }}
-              >
-                {demoMode ? "Demo mode: on" : "Demo mode: off"}
-              </button>
               <button
                 type="button"
                 className="vaxzone-chatbot__welcome-chip"
@@ -1010,30 +1128,27 @@ export default function VaxZoneChatbot() {
               <button
                 type="button"
                 className="vaxzone-chatbot__welcome-chip"
-                onClick={() => setCopilotMode((current) => !current)}
+                onClick={() => {
+                  const nextValue = !demoMode;
+                  setDemoMode(nextValue);
+                  writeChatbotDemoMode(nextValue);
+                }}
               >
-                {copilotMode ? "Copilot: on" : "Copilot: off"}
+                {demoMode ? "Demo mode: on" : "Demo mode: off"}
               </button>
             </div>
-            <div className="vaxzone-chatbot__welcome-role">Local notes: {notesCount} | Bookmarks: {bookmarksCount}</div>
-            {demoMode ? (
-              <div className="vaxzone-chatbot__cards">
-                {getDemoScriptCommands().map((command, index) => (
-                  <article key={`demo-${index}`} className="vaxzone-chatbot__card vaxzone-chatbot__card--record">
-                    <div className="vaxzone-chatbot__card-topline">
-                      <div className="vaxzone-chatbot__card-copy">
-                        <div className="vaxzone-chatbot__card-eyebrow">Demo step {index + 1}</div>
-                        <h4 className="vaxzone-chatbot__card-title">{command}</h4>
-                      </div>
-                    </div>
-                    <div className="vaxzone-chatbot__card-actions">
-                      <button type="button" className="vaxzone-chatbot__card-button" onClick={() => handleSend(command)}>
-                        Run
-                      </button>
-                    </div>
-                  </article>
-                ))}
-              </div>
+            {shouldShowOnboarding ? (
+              <button
+                type="button"
+                className="vaxzone-chatbot__more-actions"
+                onClick={() => {
+                  const nextValue = { ...onboardingState, [role]: true };
+                  setOnboardingState(nextValue);
+                  writeChatbotOnboardingState(nextValue);
+                }}
+              >
+                Hide intro tips
+              </button>
             ) : null}
             {allQuickActions.length > 4 ? (
               <button
@@ -1104,14 +1219,9 @@ export default function VaxZoneChatbot() {
               ))}
             </div>
           ) : null}
-          {isMobileViewport ? (
+          {isTabletViewport ? (
             <div className="vaxzone-chatbot__chip-row vaxzone-chatbot__chip-row--floating">
-              {[
-                { label: "Book", prompt: "book slot tomorrow" },
-                { label: "Centers", prompt: "find centers in Delhi" },
-                { label: "Cert", prompt: "download my certificate" },
-                { label: "Help", prompt: "help on this page" }
-              ].map((item) => (
+              {mobileQuickChips.map((item) => (
                 <button type="button" className="vaxzone-chatbot__chip" key={item.label} onClick={() => handleSend(item.prompt)}>
                   {item.label}
                 </button>
@@ -1124,15 +1234,15 @@ export default function VaxZoneChatbot() {
       <button
         type="button"
         className={`vaxzone-chatbot__launcher ${uiState.isOpen && uiState.isMinimized ? "is-peek" : ""}`}
-        onClick={() => setUiState({ isOpen: true, isMinimized: false })}
-        aria-label={uiState.isOpen && uiState.isMinimized ? "Expand Ask VaxZone" : "Open Ask VaxZone"}
+        onClick={toggleLauncher}
+        aria-label={uiState.isOpen && !uiState.isMinimized ? "Minimize Ask VaxZone" : uiState.isOpen && uiState.isMinimized ? "Expand Ask VaxZone" : "Open Ask VaxZone"}
       >
         <span className="vaxzone-chatbot__launcher-icon">
-          <i className="bi bi-stars"></i>
+          <i className={`bi ${uiState.isOpen && !uiState.isMinimized ? "bi-dash-lg" : "bi-stars"}`}></i>
         </span>
         <span className="vaxzone-chatbot__launcher-copy">
           <strong>{CHATBOT_NAME}</strong>
-          <small>{pageContext.label}</small>
+          <small>{uiState.isOpen && !uiState.isMinimized ? "Minimize" : pageContext.label}</small>
         </span>
       </button>
     </div>

@@ -8,9 +8,9 @@
   "theme_color": "#0ea5e9",
   "icons": [
     {
-      "src": "/assets/logo/vaxzone-logo.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
+      "src": "/assets/logo/vaxzone-logo-report.png",
+      "sizes": "1774x887",
+      "type": "image/png",
       "purpose": "any"
     }
   ]

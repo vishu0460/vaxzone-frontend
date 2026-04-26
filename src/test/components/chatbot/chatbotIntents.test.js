@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CHATBOT_INTENTS } from "../../../components/chatbot/chatbotActionRegistry";
 import { parseChatbotIntent } from "../../../components/chatbot/chatbotIntents";
+import { extractCity } from "../../../components/chatbot/chatbotParamParser";
 
 const CASES = [
   ["I want to book vaccine", CHATBOT_INTENTS.BOOK_SLOT],
@@ -27,6 +28,19 @@ const CASES = [
   ["change my slot", CHATBOT_INTENTS.RESCHEDULE_BOOKING],
   ["show my bookings", CHATBOT_INTENTS.VIEW_MY_BOOKINGS],
   ["my bookings please", CHATBOT_INTENTS.VIEW_MY_BOOKINGS],
+  ["show pending bookings", CHATBOT_INTENTS.USER_BOOKINGS_FILTER],
+  ["my upcoming bookings", CHATBOT_INTENTS.USER_BOOKINGS_FILTER],
+  ["how many centers in my city", CHATBOT_INTENTS.CENTER_COUNT_BY_CITY],
+  ["how many centers in Delhi", CHATBOT_INTENTS.CENTER_COUNT_BY_CITY],
+  ["how many active drives", CHATBOT_INTENTS.ACTIVE_DRIVE_COUNT],
+  ["available slots in Ludhiana", CHATBOT_INTENTS.SLOT_COUNT_BY_CITY],
+  ["how many bookings I have", CHATBOT_INTENTS.MY_BOOKING_COUNT],
+  ["what is covid 19 vaccine", CHATBOT_INTENTS.HEALTH_KNOWLEDGE],
+  ["is covid vaccine safe", CHATBOT_INTENTS.HEALTH_KNOWLEDGE],
+  ["tell me about booster dose", CHATBOT_INTENTS.HEALTH_KNOWLEDGE],
+  ["tell me about new government scheme", CHATBOT_INTENTS.NEWS_KNOWLEDGE],
+  ["latest viral virus", CHATBOT_INTENTS.NEWS_KNOWLEDGE],
+  ["show government vaccine news", CHATBOT_INTENTS.NEWS_KNOWLEDGE],
   ["show notifications", CHATBOT_INTENTS.VIEW_NOTIFICATIONS],
   ["clear notifications", CHATBOT_INTENTS.MARK_NOTIFICATIONS_READ],
   ["update my profile", CHATBOT_INTENTS.UPDATE_PROFILE],
@@ -70,6 +84,15 @@ describe("parseChatbotIntent", () => {
     expect(result.date).toMatch(/^20\d{2}-\d{2}-\d{2}$/);
   });
 
+  it("does not treat my city as a literal city", () => {
+    expect(extractCity("find drives in my city")).toBe("");
+  });
+
+  it("supports simple city typos and hinglish suffixes", () => {
+    expect(extractCity("delh slots tomorrow")).toBe("Delhi");
+    expect(extractCity("show centers in delhi me")).toBe("Delhi");
+  });
+
   it("keeps certificate number", () => {
     const result = parseChatbotIntent("verify certificate VXZ-2026-00991");
     expect(result.certificateNumber).toBe("VXZ-2026-00991");
@@ -77,6 +100,17 @@ describe("parseChatbotIntent", () => {
 
   it("asks for clarification on vague text", () => {
     const result = parseChatbotIntent("hello");
+    expect(result.resolvedIntent || result.intent).toBe(CHATBOT_INTENTS.GREETING);
+    expect(result.needsClarification).toBe(false);
+  });
+
+  it("understands thanks and goodbye", () => {
+    expect(parseChatbotIntent("thanks").resolvedIntent || parseChatbotIntent("thanks").intent).toBe(CHATBOT_INTENTS.THANKS);
+    expect(parseChatbotIntent("bye").resolvedIntent || parseChatbotIntent("bye").intent).toBe(CHATBOT_INTENTS.GOODBYE);
+  });
+
+  it("still asks for clarification on vague unrelated text", () => {
+    const result = parseChatbotIntent("hmm");
     expect(result.needsClarification).toBe(true);
     expect(result.intent).toBe(CHATBOT_INTENTS.CLARIFY);
   });

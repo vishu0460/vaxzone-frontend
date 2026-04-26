@@ -40,37 +40,38 @@ export const resolveChatbotPageContext = (locationLike = {}) => {
   const search = new URLSearchParams(String(locationLike.search || ""));
   const tab = search.get("tab") || "";
   const section = search.get("section") || "";
+  const city = search.get("city") || "";
 
   if (pathname === "/") {
-    return { key: "home", label: "Home", pathname, tab, section };
+    return { key: "home", label: "Home", pathname, tab, section, city };
   }
   if (pathname.startsWith("/drives")) {
-    return { key: "drives", label: "Drives", pathname, tab, section };
+    return { key: "drives", label: "Drives", pathname, tab, section, city };
   }
   if (pathname.startsWith("/centers")) {
-    return { key: "centers", label: "Centers", pathname, tab, section };
+    return { key: "centers", label: "Centers", pathname, tab, section, city };
   }
   if (pathname.startsWith("/user/bookings")) {
-    return { key: "bookings", label: tab === "notifications" ? "Notifications" : tab === "slots" ? "Slots" : "Bookings", pathname, tab, section };
+    return { key: "bookings", label: tab === "notifications" ? "Notifications" : tab === "slots" ? "Slots" : "Bookings", pathname, tab, section, city };
   }
   if (pathname.startsWith("/certificates")) {
-    return { key: "certificates", label: "Certificates", pathname, tab, section };
+    return { key: "certificates", label: "Certificates", pathname, tab, section, city };
   }
   if (pathname.startsWith("/verify-certificate") || pathname.startsWith("/verify/certificate")) {
-    return { key: "verify-certificate", label: "Certificate Verification", pathname, tab, section };
+    return { key: "verify-certificate", label: "Certificate Verification", pathname, tab, section, city };
   }
   if (pathname.startsWith("/admin")) {
     const adminSection = pathname.split("/")[2] || section || "dashboard";
-    return { key: "admin", label: `Admin ${adminSection}`, pathname, tab, section: adminSection };
+    return { key: "admin", label: `Admin ${adminSection}`, pathname, tab, section: adminSection, city };
   }
   if (pathname.startsWith("/contact")) {
-    return { key: "contact", label: "Support", pathname, tab, section };
+    return { key: "contact", label: "Support", pathname, tab, section, city };
   }
   if (pathname.startsWith("/feedback")) {
-    return { key: "feedback", label: "Feedback", pathname, tab, section };
+    return { key: "feedback", label: "Feedback", pathname, tab, section, city };
   }
 
-  return { key: "general", label: "VaxZone", pathname, tab, section };
+  return { key: "general", label: "VaxZone", pathname, tab, section, city };
 };
 
 const ROLE_BASE_ACTIONS = {
@@ -220,6 +221,19 @@ const PAGE_EXAMPLES = {
 export const getQuickActionsForRole = (role, pageContext = { key: "general" }) => {
   const baseActions = ROLE_BASE_ACTIONS[role] || ROLE_BASE_ACTIONS[CHATBOT_ROLES.GUEST];
   const pageActions = PAGE_ACTIONS[pageContext.key] || {};
+
+  if (pageContext.key === "bookings" && role === CHATBOT_ROLES.USER && pageContext.tab === "slots") {
+    return buildUniqueActions(
+      [
+        buildPromptAction("page-slots-pending", "Pending bookings", "show pending bookings"),
+        buildPromptAction("page-slots-book", "Book slot", "book slot tomorrow"),
+        buildPromptAction("page-slots-reschedule", "Reschedule booking", "reschedule booking"),
+        buildPromptAction("page-slots-cert", "Download certificate", "download my certificate")
+      ],
+      baseActions
+    ).slice(0, 8);
+  }
+
   return buildUniqueActions(
     pageActions.ALL || [],
     pageActions[role] || [],

@@ -6,6 +6,26 @@ const CLARIFY_TEXT = "Do you want help with centers, drives, bookings, certifica
 
 const INTENT_RULES = [
   {
+    intent: CHATBOT_INTENTS.GREETING,
+    any: ["hi", "hello", "hey", "good morning", "good afternoon", "good evening", "namaste", "hello there"],
+    bonus: ["hi", "hello", "hey", "morning", "namaste"]
+  },
+  {
+    intent: CHATBOT_INTENTS.THANKS,
+    any: ["thanks", "thank you", "thankyou", "thx", "thanks a lot"],
+    bonus: ["thanks", "thank"]
+  },
+  {
+    intent: CHATBOT_INTENTS.GOODBYE,
+    any: ["bye", "goodbye", "see you", "see ya", "take care", "gn", "good night"],
+    bonus: ["bye", "goodbye", "care"]
+  },
+  {
+    intent: CHATBOT_INTENTS.ACKNOWLEDGEMENT,
+    any: ["ok", "okay", "kk", "alright", "fine", "got it"],
+    bonus: ["ok", "okay", "alright"]
+  },
+  {
     intent: CHATBOT_INTENTS.BOOK_SLOT,
     any: ["book slot", "book vaccine", "need vaccine slot", "vaccine slot", "recommended slots", "available slot tomorrow", "available slot"],
     allGroups: ["book"],
@@ -31,6 +51,16 @@ const INTENT_RULES = [
     intent: CHATBOT_INTENTS.VACCINE_INFO,
     any: ["vaccine info", "dose number", "required age", "vaccine availability"],
     bonus: ["vaccine", "dose", "age", "availability"]
+  },
+  {
+    intent: CHATBOT_INTENTS.HEALTH_KNOWLEDGE,
+    any: ["what is covid 19 vaccine", "tell me about covid vaccine", "is covid vaccine safe", "is vaccine safe", "what are vaccine side effects", "what is booster dose", "who should take vaccine"],
+    bonus: ["covid", "vaccine", "safe", "side effects", "booster", "dose"]
+  },
+  {
+    intent: CHATBOT_INTENTS.NEWS_KNOWLEDGE,
+    any: ["tell me about new government scheme", "latest viral virus", "show government vaccine news", "government updates", "health alert", "latest virus news"],
+    bonus: ["government", "scheme", "latest", "virus", "news", "alert"]
   },
   {
     intent: CHATBOT_INTENTS.CERTIFICATE_ISSUE_HELP,
@@ -160,6 +190,12 @@ const INTENT_RULES = [
     bonus: ["city", "show", "find"]
   },
   {
+    intent: CHATBOT_INTENTS.CENTER_COUNT_BY_CITY,
+    any: ["how many centers", "centers count", "number of centers"],
+    allGroups: ["center", "count"],
+    bonus: ["city", "how many", "count"]
+  },
+  {
     intent: CHATBOT_INTENTS.SEARCH_DRIVES,
     any: ["find drives", "show drives", "drives in my city", "drives tomorrow", "find available slots tomorrow"],
     allGroups: ["drive"],
@@ -170,6 +206,30 @@ const INTENT_RULES = [
     any: ["active drives", "live drives", "show active drives"],
     allGroups: ["drive"],
     bonus: ["active", "today"]
+  },
+  {
+    intent: CHATBOT_INTENTS.DRIVE_COUNT_BY_CITY,
+    any: ["how many drives", "drives count"],
+    allGroups: ["drive", "count"],
+    bonus: ["city", "how many", "count"]
+  },
+  {
+    intent: CHATBOT_INTENTS.ACTIVE_DRIVE_COUNT,
+    any: ["how many active drives", "active drives count"],
+    allGroups: ["drive", "count"],
+    bonus: ["active", "how many", "count"]
+  },
+  {
+    intent: CHATBOT_INTENTS.SLOT_COUNT_BY_CITY,
+    any: ["available slots in", "how many slots in", "slots count in"],
+    allGroups: ["slot", "count"],
+    bonus: ["city", "available", "how many", "count"]
+  },
+  {
+    intent: CHATBOT_INTENTS.AVAILABLE_SLOT_COUNT,
+    any: ["how many available slots", "available slots count"],
+    allGroups: ["slot", "count"],
+    bonus: ["available", "how many", "count"]
   },
   {
     intent: CHATBOT_INTENTS.VIEW_CERTIFICATES,
@@ -194,6 +254,41 @@ const INTENT_RULES = [
     any: ["show my bookings", "my bookings", "booking status"],
     allGroups: ["booking"],
     bonus: ["show", "my"]
+  },
+  {
+    intent: CHATBOT_INTENTS.USER_BOOKINGS_FILTER,
+    any: ["show pending bookings", "my pending bookings", "show upcoming bookings", "my upcoming bookings", "upcoming booking", "show completed bookings", "show cancelled bookings"],
+    allGroups: ["booking"],
+    bonus: ["pending", "upcoming", "completed", "cancelled", "canceled", "my"]
+  },
+  {
+    intent: CHATBOT_INTENTS.MY_BOOKING_COUNT,
+    any: ["how many bookings i have", "my bookings count", "booking count"],
+    allGroups: ["booking", "count"],
+    bonus: ["my", "how many", "count"]
+  },
+  {
+    intent: CHATBOT_INTENTS.MY_CERTIFICATE_COUNT,
+    any: ["how many certificates i have", "my certificate count", "my certificates count"],
+    allGroups: ["certificate", "count"],
+    bonus: ["my", "how many", "count"]
+  },
+  {
+    intent: CHATBOT_INTENTS.USER_DASHBOARD_SUMMARY,
+    any: ["my dashboard summary", "my summary", "my account summary"],
+    allGroups: ["summary"],
+    bonus: ["my", "dashboard", "summary"]
+  },
+  {
+    intent: CHATBOT_INTENTS.ADMIN_DASHBOARD_SUMMARY,
+    any: ["admin dashboard summary", "admin summary"],
+    allGroups: ["admin", "summary"]
+  },
+  {
+    intent: CHATBOT_INTENTS.SUPER_ADMIN_SUMMARY,
+    any: ["super admin summary", "system summary"],
+    allGroups: ["admin", "summary"],
+    bonus: ["super", "system"]
   },
   {
     intent: CHATBOT_INTENTS.CANCEL_BOOKING,
@@ -436,6 +531,18 @@ const INTENT_RULES = [
 ];
 
 const inferIntentFromParams = (normalizedInput, params, pageContext) => {
+  if (/^(hi|hello|hey|good morning|good afternoon|good evening|namaste)\b/.test(normalizedInput)) {
+    return CHATBOT_INTENTS.GREETING;
+  }
+  if (/^(thanks|thank you|thankyou|thx)\b/.test(normalizedInput)) {
+    return CHATBOT_INTENTS.THANKS;
+  }
+  if (/^(bye|goodbye|see you|take care|good night)\b/.test(normalizedInput)) {
+    return CHATBOT_INTENTS.GOODBYE;
+  }
+  if (/^(ok|okay|alright|fine|got it)\b/.test(normalizedInput)) {
+    return CHATBOT_INTENTS.ACKNOWLEDGEMENT;
+  }
   if (params.asksForRegister) {
     return CHATBOT_INTENTS.REGISTER_HELP;
   }
@@ -444,6 +551,19 @@ const inferIntentFromParams = (normalizedInput, params, pageContext) => {
   }
   if (params.asksForContact) {
     return CHATBOT_INTENTS.CONTACT_SUPPORT;
+  }
+  if (/^my certificate(s)?$/.test(normalizedInput)) {
+    return CHATBOT_INTENTS.VIEW_CERTIFICATES;
+  }
+  if (/\bavailable slots in\b/.test(normalizedInput) || (/\bslots count\b/.test(normalizedInput) && (params.city || /\bmy city\b/.test(normalizedInput)))) {
+    return CHATBOT_INTENTS.SLOT_COUNT_BY_CITY;
+  }
+  if ((/\b(government|scheme|virus|health alert)\b/.test(normalizedInput) || /\bshow government vaccine news\b/.test(normalizedInput))
+    && !/\b(post|edit|delete|latest news)\b/.test(normalizedInput)) {
+    return CHATBOT_INTENTS.NEWS_KNOWLEDGE;
+  }
+  if (/\bdashboard report\b/.test(normalizedInput) && /\badmin\b/.test(normalizedInput)) {
+    return CHATBOT_INTENTS.ADMIN_STATS;
   }
   if (params.asksSystemHealth) {
     return CHATBOT_INTENTS.SYSTEM_HEALTH;
@@ -505,8 +625,24 @@ const inferIntentFromParams = (normalizedInput, params, pageContext) => {
   if (params.macroKey) {
     return CHATBOT_INTENTS.RUN_MACRO;
   }
+  if (params.bookingStatusFilter && /booking/.test(normalizedInput) && /\b(show|my|pending|upcoming|completed|cancelled|canceled)\b/.test(normalizedInput) && !/\b(cancel booking|booking cancel|reschedule)\b/.test(normalizedInput)) {
+    return CHATBOT_INTENTS.USER_BOOKINGS_FILTER;
+  }
   if (params.analyticsMetric) {
-    return pageContext?.key === "admin" ? CHATBOT_INTENTS.ADMIN_STATS : CHATBOT_INTENTS.ADMIN_STATS;
+    if (params.analyticsMetric === "activeDrives") {
+      return /\bhow many\b|\bcount\b/.test(normalizedInput) ? CHATBOT_INTENTS.ACTIVE_DRIVE_COUNT : CHATBOT_INTENTS.VIEW_ACTIVE_DRIVES;
+    }
+    if (params.analyticsMetric === "availableSlots" && !/\badmin\b|\bdashboard\b|\bstats\b|\banalytics\b/.test(normalizedInput)) {
+      return (/\bhow many\b|\bcount\b/.test(normalizedInput) || /\bavailable slots in\b/.test(normalizedInput))
+        ? (params.city ? CHATBOT_INTENTS.SLOT_COUNT_BY_CITY : CHATBOT_INTENTS.AVAILABLE_SLOT_COUNT)
+        : CHATBOT_INTENTS.BOOK_SLOT;
+    }
+    if (["pendingBookings", "completedBookings"].includes(params.analyticsMetric) && /booking/.test(normalizedInput)) {
+      return pageContext?.key === "admin" || /\b(admin|dashboard|stats|analytics)\b/.test(normalizedInput)
+        ? CHATBOT_INTENTS.ADMIN_STATS
+        : CHATBOT_INTENTS.USER_BOOKINGS_FILTER;
+    }
+    return CHATBOT_INTENTS.ADMIN_STATS;
   }
   if (params.slotId && normalizedInput.includes("book")) {
     return CHATBOT_INTENTS.QUICK_BOOK_SLOT;
@@ -514,19 +650,51 @@ const inferIntentFromParams = (normalizedInput, params, pageContext) => {
   if (params.certificateNumber) {
     return normalizedInput.includes("download") ? CHATBOT_INTENTS.DOWNLOAD_CERTIFICATE : CHATBOT_INTENTS.VERIFY_CERTIFICATE;
   }
+  if (/\bhow many\b|\bcount\b|\bnumber of\b/.test(normalizedInput)) {
+    if (/\bcenter/.test(normalizedInput)) {
+      return CHATBOT_INTENTS.CENTER_COUNT_BY_CITY;
+    }
+    if (/\bdrive/.test(normalizedInput) && /\bactive\b/.test(normalizedInput)) {
+      return CHATBOT_INTENTS.ACTIVE_DRIVE_COUNT;
+    }
+    if (/\bdrive/.test(normalizedInput)) {
+      return CHATBOT_INTENTS.DRIVE_COUNT_BY_CITY;
+    }
+    if (/\bslot/.test(normalizedInput) && /\bmy\b/.test(normalizedInput) === false) {
+      return params.city || /\bmy city\b/.test(normalizedInput)
+        ? CHATBOT_INTENTS.SLOT_COUNT_BY_CITY
+        : CHATBOT_INTENTS.AVAILABLE_SLOT_COUNT;
+    }
+    if (/\bbooking/.test(normalizedInput) && /\bmy\b|\bi have\b/.test(normalizedInput)) {
+      return CHATBOT_INTENTS.MY_BOOKING_COUNT;
+    }
+    if (/\bcertificate/.test(normalizedInput) && /\bmy\b|\bi have\b/.test(normalizedInput)) {
+      return CHATBOT_INTENTS.MY_CERTIFICATE_COUNT;
+    }
+  }
+  if ((/\b(government|scheme|virus|health alert)\b/.test(normalizedInput) || /\bshow government vaccine news\b/.test(normalizedInput))
+    && !/\b(post|edit|delete|latest news)\b/.test(normalizedInput)) {
+    return CHATBOT_INTENTS.NEWS_KNOWLEDGE;
+  }
+  if (/\b(covid|vaccine|booster|side effects|safe)\b/.test(normalizedInput) && /\b(what is|tell me|is|who should)\b/.test(normalizedInput)) {
+    return CHATBOT_INTENTS.HEALTH_KNOWLEDGE;
+  }
   if (containsPhrase(normalizedInput, "nearby")) {
     return CHATBOT_INTENTS.FIND_NEARBY_CENTER;
   }
   if (pageContext?.key === "certificates" && normalizedInput.includes("download")) {
     return CHATBOT_INTENTS.DOWNLOAD_CERTIFICATE;
   }
-  if (pageContext?.key === "bookings" && normalizedInput.includes("pending")) {
-    return CHATBOT_INTENTS.VIEW_MY_BOOKINGS;
+  if (pageContext?.key === "bookings" && /\b(pending|upcoming|completed|cancelled|canceled)\b/.test(normalizedInput)) {
+    return CHATBOT_INTENTS.USER_BOOKINGS_FILTER;
   }
   return CHATBOT_INTENTS.HELP;
 };
 
 const shouldClarify = (bestScore, secondScore, normalizedInput, inferredIntent) => {
+  if ([CHATBOT_INTENTS.GREETING, CHATBOT_INTENTS.THANKS, CHATBOT_INTENTS.GOODBYE, CHATBOT_INTENTS.ACKNOWLEDGEMENT].includes(inferredIntent)) {
+    return false;
+  }
   if (!normalizedInput) {
     return true;
   }
@@ -563,9 +731,26 @@ export const parseChatbotIntent = (value, options = {}) => {
 
   const best = scored[0] || { intent: CHATBOT_INTENTS.HELP, score: 0 };
   const second = scored[1] || { intent: CHATBOT_INTENTS.HELP, score: 0 };
-  const inferredIntent = best.score > 0
-    ? best.intent
-    : inferIntentFromParams(normalizedInput, extractedParams, options.pageContext);
+  const inferredFromParams = inferIntentFromParams(normalizedInput, extractedParams, options.pageContext);
+  const overrideIntents = new Set([
+    CHATBOT_INTENTS.VIEW_CERTIFICATES,
+    CHATBOT_INTENTS.USER_BOOKINGS_FILTER,
+    CHATBOT_INTENTS.CENTER_COUNT_BY_CITY,
+    CHATBOT_INTENTS.DRIVE_COUNT_BY_CITY,
+    CHATBOT_INTENTS.ACTIVE_DRIVE_COUNT,
+    CHATBOT_INTENTS.SLOT_COUNT_BY_CITY,
+    CHATBOT_INTENTS.AVAILABLE_SLOT_COUNT,
+    CHATBOT_INTENTS.MY_BOOKING_COUNT,
+    CHATBOT_INTENTS.MY_CERTIFICATE_COUNT,
+    CHATBOT_INTENTS.HEALTH_KNOWLEDGE,
+    CHATBOT_INTENTS.NEWS_KNOWLEDGE,
+    CHATBOT_INTENTS.ADMIN_STATS
+  ]);
+  const inferredIntent = inferredFromParams !== CHATBOT_INTENTS.HELP && overrideIntents.has(inferredFromParams)
+    ? inferredFromParams
+    : best.score > 0
+      ? best.intent
+      : inferredFromParams;
   const lowConfidence = shouldClarify(best.score, second.score, normalizedInput, inferredIntent);
 
   return {

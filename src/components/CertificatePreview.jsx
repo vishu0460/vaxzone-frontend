@@ -29,7 +29,7 @@ const CertificatePreview = forwardRef(function CertificatePreview({ certificate,
 
         <header className="certificate-preview__header">
           <div className="certificate-preview__brand">
-            <img src="/assets/logo/vaxzone-logo.svg" alt="VaxZone logo" className="certificate-preview__logo" />
+            <img src="/assets/logo/vaxzone-logo-report.png" alt="VaxZone logo" className="certificate-preview__logo" />
             <div>
               <h2>Vaccination Certificate</h2>
               <p>Official Government Vaccination Record</p>
